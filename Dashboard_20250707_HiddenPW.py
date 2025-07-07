@@ -53,17 +53,17 @@ def index():
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            padding: 8px;
+            padding: 12px;
             backdrop-filter: blur(10px);
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 44px;
-            max-height: 44px;
+            max-width: 64px;
+            max-height: 64px;
             object-fit: contain;
             opacity: 0.9;
         }}
