@@ -43,22 +43,21 @@ def index():
             min-height: 100vh; color: #333;
         }}
         .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
-        .header {{ text-align: center; margin-bottom: 30px; color: white; position: relative; min-height: 80px; }}
-        .header h1 {{ font-size: 2.5em; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }}
-        .header h2 {{ font-size: 1.5em; margin-bottom: 10px; color: #f0f0f0; font-weight: normal; }}
+        .header {{ text-align: center; margin-bottom: 30px; color: white; position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; }}
+        .header-content {{ display: flex; align-items: center; gap: 20px; }}
+        .header-text {{ text-align: center; }}
+        .header-text h1 {{ font-size: 2.5em; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }}
+        .header-text h2 {{ font-size: 1.5em; margin-bottom: 10px; color: #f0f0f0; font-weight: normal; }}
         .stasis-logo {{
-            position: absolute;
-            top: 10px;
-            right: 25px;
-            width: 360px;
-            height: 300px;
+            width: 120px;
+            height: 90px;
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 270px;
-            max-height: 210px;
+            max-width: 120px;
+            max-height: 90px;
             object-fit: contain;
             opacity: 0.9;
         }}
@@ -146,12 +145,16 @@ def index():
 <body>
     <div class="container">
         <div class="header">
-            <div class="stasis-logo">
-                <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
+            <div class="header-content">
+                <div class="stasis-logo">
+                    <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
+                </div>
+                <div class="header-text">
+                    <h1>Stasis Energy Group</h1>
+                    <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
+                    <p class="powered-by">Thermal Energy Storage Dashboard</p>
+                </div>
             </div>
-            <h1>Stasis Energy Group</h1>
-            <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
-            <p class="powered-by">Thermal Energy Storage Dashboard</p>
         </div>
         
         <div class="card">
