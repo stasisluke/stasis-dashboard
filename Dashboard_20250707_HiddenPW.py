@@ -170,24 +170,6 @@ def index():
         </div>
         
         <div class="card">
-            <h3>System Status</h3>
-            <div class="status-grid">
-                <div class="status-item">
-                    <div class="status-value" id="zoneSetpoint">--°F</div>
-                    <div class="status-label">Zone Setpoint</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-value" id="systemMode">--</div>
-                    <div class="status-label">System Mode</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-value" id="fanStatus">--</div>
-                    <div class="status-label">Supply Fan</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
             <h3>Temperature History</h3>
             <div class="chart-container">
                 <canvas id="temperatureChart"></canvas>
@@ -289,10 +271,6 @@ def index():
                 document.getElementById('deviceTitle').textContent = `{SITE} : Device {DEVICE}`;
             }}
             
-            // Update other status displays
-            document.getElementById('zoneSetpoint').textContent = setpointValue + '°F';
-            document.getElementById('systemMode').textContent = data.system_mode || '--';
-            document.getElementById('fanStatus').textContent = data.fan ? 'ON' : 'OFF';
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
             
             // Add to chart
