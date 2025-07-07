@@ -48,22 +48,22 @@ def index():
         .header h2 {{ font-size: 1.5em; margin-bottom: 10px; color: #f0f0f0; font-weight: normal; }}
         .stasis-logo {{
             position: absolute;
-            top: 15px;
+            top: 10px;
             right: 25px;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 12px;
+            padding: 15px;
             backdrop-filter: blur(10px);
-            width: 80px;
-            height: 80px;
+            width: 120px;
+            height: 100px;
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 64px;
-            max-height: 64px;
+            max-width: 90px;
+            max-height: 70px;
             object-fit: contain;
             opacity: 0.9;
         }}
