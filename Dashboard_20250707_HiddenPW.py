@@ -50,15 +50,15 @@ def index():
             position: absolute;
             top: 10px;
             right: 25px;
-            width: 120px;
-            height: 100px;
+            width: 360px;
+            height: 300px;
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 90px;
-            max-height: 70px;
+            max-width: 270px;
+            max-height: 210px;
             object-fit: contain;
             opacity: 0.9;
         }}
