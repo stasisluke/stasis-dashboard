@@ -50,11 +50,6 @@ def index():
             position: absolute;
             top: 10px;
             right: 25px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            padding: 15px;
-            backdrop-filter: blur(10px);
             width: 120px;
             height: 100px;
             display: flex;
