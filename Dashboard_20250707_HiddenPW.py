@@ -49,9 +49,9 @@ def index():
         .header-text h2 {{ font-size: 1.5em; margin-bottom: 10px; color: #f0f0f0; font-weight: normal; }}
         .stasis-logo {{
             position: absolute;
-            left: 50%;
+            left: 20px;
             top: 50%;
-            transform: translate(-80%, -50%);
+            transform: translateY(-50%);
             width: 200px;
             height: 120px;
             display: flex;
