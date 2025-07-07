@@ -139,7 +139,57 @@ def index():
         .status-item {{ text-align: center; padding: 15px; background: rgba(0, 0, 0, 0.05); border-radius: 10px; }}
         .status-value {{ font-size: 1.5em; font-weight: bold; color: #2196F3; }}
         .status-label {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
-        .chart-container {{ position: relative; height: 300px; margin-top: 20px; }}
+        .schedule-status {{
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px 0;
+        }}
+        
+        .occupancy-info, .peak-period-info, .tess-explanation {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.03);
+        }}
+        
+        .occupancy-info.occupied {{
+            background: rgba(76, 175, 80, 0.1);
+            border-left: 4px solid #4CAF50;
+        }}
+        
+        .occupancy-info.unoccupied {{
+            background: rgba(158, 158, 158, 0.1);
+            border-left: 4px solid #9E9E9E;
+        }}
+        
+        .peak-period-info.active {{
+            background: rgba(255, 152, 0, 0.1);
+            border-left: 4px solid #FF9800;
+        }}
+        
+        .peak-period-info.inactive {{
+            background: rgba(33, 150, 243, 0.1);
+            border-left: 4px solid #2196F3;
+        }}
+        
+        .tess-explanation {{
+            background: rgba(103, 58, 183, 0.1);
+            border-left: 4px solid #673AB7;
+        }}
+        
+        .occupancy-icon, .peak-icon, .info-icon {{
+            font-size: 1.2em;
+            min-width: 24px;
+        }}
+        
+        .occupancy-text, .peak-text, .explanation-text {{
+            font-size: 0.95em;
+            font-weight: 500;
+            color: #333;
+        }}
         .last-updated {{ font-size: 0.9em; color: #666; text-align: center; margin-top: 10px; }}
         .btn {{ padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; background: #2196F3; color: white; margin: 5px; }}
         .btn:hover {{ background: #1976D2; }}
@@ -170,9 +220,20 @@ def index():
         </div>
         
         <div class="card">
-            <h3>Temperature History</h3>
-            <div class="chart-container">
-                <canvas id="temperatureChart"></canvas>
+            <h3>Building Schedule & Energy Status</h3>
+            <div class="schedule-status" id="scheduleStatus">
+                <div class="occupancy-info" id="occupancyInfo">
+                    <span class="occupancy-icon">👥</span>
+                    <span class="occupancy-text" id="occupancyText">Loading schedule...</span>
+                </div>
+                <div class="peak-period-info" id="peakPeriodInfo">
+                    <span class="peak-icon">🕐</span>
+                    <span class="peak-text" id="peakText">Peak Hours: 4:00 PM - 9:00 PM</span>
+                </div>
+                <div class="tess-explanation" id="tessExplanation">
+                    <span class="info-icon">💡</span>
+                    <span class="explanation-text" id="explanationText">Loading system status...</span>
+                </div>
             </div>
         </div>
         
@@ -249,22 +310,25 @@ def index():
             if (data.peak_savings) {{
                 circle.classList.add('peak-savings');
                 modeText.classList.add('peak-savings');
-                modeText.textContent = 'Peak Savings Mode';
+                modeText.textContent = 'PEAK SAVINGS ACTIVE';
             }} else if (data.system_mode === 'Cooling') {{
                 circle.classList.add('cooling');
                 modeText.classList.add('cooling');
-                modeText.textContent = 'Cooling';
+                modeText.textContent = 'COOLING';
             }} else if (data.system_mode === 'Heating') {{
                 circle.classList.add('heating');
                 modeText.classList.add('heating');
-                modeText.textContent = 'Heating';
+                modeText.textContent = 'HEATING';
             }} else {{
                 circle.classList.add('deadband');
                 modeText.classList.add('deadband');
-                modeText.textContent = 'Standby';
+                modeText.textContent = 'STANDBY';
             }}
             
-            // Update device title - show "Site : Device Name" format
+            // Update schedule and TESS information
+            updateScheduleDisplay(data.peak_savings, data.schedule_value);
+            
+            // Update device title
             if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
                 document.getElementById('deviceTitle').textContent = `{SITE} : ${{data.device_name}}`;
             }} else {{
@@ -272,20 +336,60 @@ def index():
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+        }}
+        
+        // Update schedule display based on current time, peak savings status, and actual schedule
+        function updateScheduleDisplay(isPeakSavingsActive, scheduleValue) {{
+            const now = new Date();
+            const currentHour = now.getHours();
             
-            // Add to chart
-            if (data.temperature) {{
-                const now = new Date().toLocaleTimeString();
-                chart.data.labels.push(now);
-                chart.data.datasets[0].data.push(data.temperature);
-                
-                // Keep only last 20 points
-                if (chart.data.labels.length > 20) {{
-                    chart.data.labels.shift();
-                    chart.data.datasets[0].data.shift();
-                }}
-                
-                chart.update();
+            // Determine occupancy from SCH1 value
+            // Common schedule values: "Occupied", "Unoccupied", "Holiday", etc.
+            // You may need to adjust this logic based on your actual schedule values
+            const isOccupied = scheduleValue === 'Occupied' || scheduleValue === 1 || scheduleValue === true;
+            
+            // Define peak period (4 PM - 9 PM)
+            const peakStart = 16;  // 4 PM  
+            const peakEnd = 21;    // 9 PM
+            const isPeakPeriod = currentHour >= peakStart && currentHour < peakEnd;
+            
+            // Update occupancy display
+            const occupancyInfo = document.getElementById('occupancyInfo');
+            const occupancyText = document.getElementById('occupancyText');
+            
+            if (isOccupied) {{
+                occupancyInfo.className = 'occupancy-info occupied';
+                occupancyText.textContent = `OCCUPIED - Schedule: ${{scheduleValue || 'Active'}}`;
+                document.querySelector('.occupancy-icon').textContent = '👥';
+            }} else {{
+                occupancyInfo.className = 'occupancy-info unoccupied';
+                occupancyText.textContent = `UNOCCUPIED - Schedule: ${{scheduleValue || 'Inactive'}}`;
+                document.querySelector('.occupancy-icon').textContent = '🌙';
+            }}
+            
+            // Update peak period display
+            const peakPeriodInfo = document.getElementById('peakPeriodInfo');
+            const peakText = document.getElementById('peakText');
+            
+            if (isPeakPeriod) {{
+                peakPeriodInfo.className = 'peak-period-info active';
+                peakText.textContent = 'PEAK HOURS ACTIVE: 4:00 PM - 9:00 PM';
+            }} else {{
+                peakPeriodInfo.className = 'peak-period-info inactive';
+                peakText.textContent = 'Peak Hours: 4:00 PM - 9:00 PM';
+            }}
+            
+            // Update TESS explanation based on current state
+            const explanationText = document.getElementById('explanationText');
+            
+            if (isPeakPeriod && isOccupied) {{
+                explanationText.textContent = 'Comfort maintained using stored thermal energy - reducing demand charges during business hours';
+            }} else if (isPeakPeriod && !isOccupied) {{
+                explanationText.textContent = 'Building unoccupied - maximum peak demand savings from thermal storage';
+            }} else if (!isPeakPeriod && isOccupied) {{
+                explanationText.textContent = 'Building occupied - thermal mass storing energy for this afternoon\\'s peak period';
+            }} else {{
+                explanationText.textContent = 'Thermal mass charging naturally with off-peak energy for tomorrow\\'s savings';
             }}
         }}
         
