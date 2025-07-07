@@ -17,7 +17,7 @@ SERVER = "stasisenergygroup.entelicloud.com"
 SITE = "Rancho Family YMCA"
 DEVICE = "10500"
 USER = "stasis_api"
-PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
+PASSWORD = "simpleapi"  # Update with your actual password
 
 # Basic auth header (exactly like your Python code)
 auth_header = {
@@ -50,14 +50,23 @@ def index():
             position: absolute;
             top: 15px;
             right: 25px;
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 24px;
-            color: white;
-            font-weight: bold;
+            padding: 8px;
             backdrop-filter: blur(10px);
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .stasis-logo img {{
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+            opacity: 0.9;
         }}
         .powered-by {{
             font-size: 0.9em;
@@ -144,7 +153,7 @@ def index():
     <div class="container">
         <div class="header">
             <div class="stasis-logo">
-                ✱
+                <img src="stasis-logo.png" alt="Stasis Energy Group">
             </div>
             <h1>Stasis Energy Group</h1>
             <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
@@ -325,6 +334,11 @@ def index():
 </body>
 </html>'''
 
+@app.route('/stasis-logo.png')
+def serve_logo():
+    """Serve the Stasis Energy Group logo"""
+    return send_from_directory('.', 'stasis-logo.png')
+
 @app.route('/api/thermostat')
 def get_thermostat_data():
     """
@@ -456,6 +470,4 @@ if __name__ == '__main__':
     print(f"API Test: http://localhost:8000/api/thermostat")
     print("\nMake sure to update the PASSWORD variable with your actual password!")
     
-    if __name__ == '__main__':
-        port = int(os.environ.get('PORT', 8000))
-        app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=8000, debug=True)
