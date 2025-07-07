@@ -153,7 +153,7 @@ def index():
     <div class="container">
         <div class="header">
             <div class="stasis-logo">
-                <img src="/stasis-logo.png" alt="Stasis Energy Group">
+                <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
             </div>
             <h1>Stasis Energy Group</h1>
             <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
