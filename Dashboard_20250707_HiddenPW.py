@@ -62,10 +62,9 @@ def index():
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 100%;
-            max-height: 100%;
+            max-width: 44px;
+            max-height: 44px;
             object-fit: contain;
-            filter: brightness(0) invert(1);
             opacity: 0.9;
         }}
         .powered-by {{
@@ -333,11 +332,6 @@ def index():
     </script>
 </body>
 </html>'''
-
-@app.route('/stasis-logo.png')
-def serve_logo():
-    """Serve the Stasis Energy Group logo"""
-    return send_from_directory('.', 'stasis-logo.png')
 
 @app.route('/api/thermostat')
 def get_thermostat_data():
