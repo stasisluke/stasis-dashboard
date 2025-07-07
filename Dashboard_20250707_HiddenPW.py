@@ -49,17 +49,17 @@ def index():
         .header-text h1 {{ font-size: 2.5em; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }}
         .header-text h2 {{ font-size: 1.5em; margin-bottom: 10px; color: #f0f0f0; font-weight: normal; }}
         .stasis-logo {{
-            width: 120px;
-            height: 90px;
+            width: 200px;
+            height: 120px;
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         .stasis-logo img {{
-            max-width: 120px;
-            max-height: 90px;
+            max-width: 200px;
+            max-height: 120px;
             object-fit: contain;
-            opacity: 0.9;
+            opacity: 1;
         }}
         .powered-by {{
             font-size: 0.9em;
