@@ -531,6 +531,12 @@ def debug_values():
         if response.ok:
             debug_data['bo1_present_value'] = response.json()
         
+        # Debug SCH1 - building schedule
+        schedule_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/schedule,1/present-value?alt=json"
+        response = requests.get(schedule_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['sch1_present_value'] = response.json()
+        
         return jsonify(debug_data)
         
     except Exception as e:
