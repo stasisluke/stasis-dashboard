@@ -17,7 +17,7 @@ SERVER = "stasisenergygroup.entelicloud.com"
 SITE = "Rancho Family YMCA"
 DEVICE = "10500"
 USER = "stasis_api"
-PASSWORD = "simpleapi"  # Update with your actual password
+PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
 
 # Basic auth header (exactly like your Python code)
 auth_header = {
