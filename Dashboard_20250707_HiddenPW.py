@@ -457,5 +457,5 @@ if __name__ == '__main__':
     print("\nMake sure to update the PASSWORD variable with your actual password!")
     
     if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+        port = int(os.environ.get('PORT', 8000))
+        app.run(host='0.0.0.0', port=port, debug=False)
