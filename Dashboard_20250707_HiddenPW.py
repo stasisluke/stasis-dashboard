@@ -4,19 +4,14 @@ Configurable Web Server for Thermostat Dashboard
 Easily adaptable for different controllers and EnteliCloud servers
 """
 
+import os
+
 # ============================================================================
 # CLIENT CONFIGURATION - MODIFY THESE SETTINGS FOR EACH DEPLOYMENT
 # ============================================================================
-from flask import Flask, request, jsonify, send_from_directory
-import requests
-import base64
-import os
-from datetime import datetime
-
-app = Flask(__name__)
 
 # EnteliCloud Server Connection
-SERVER = "stasisenergy.entelicloud.com"  # Your EnteliCloud server URL
+SERVER = "https://stasisenergy.entelicloud.com/"  # Your EnteliCloud server URL
 SITE = "UnivRedlands"                   # Site name in EnteliCloud
 DEVICE = "4145549"                              # Device ID number
 
@@ -35,7 +30,7 @@ OBJECTS = {
     'cooling_setpoint': 'analog-value,2',      # Cooling setpoint (if using dual setpoint)
     
     # System status indicators
-    'system_mode': 'multi-state-value,1',      # System mode (heating/cooling/deadband)
+    'system_mode': 'multi-state-value,2',      # System mode (heating/cooling/deadband)
     'peak_savings': 'binary-value,16',       # Peak demand savings mode
     'fan_status': 'binary-output,1105',           # Supply fan on/off status
     
@@ -45,7 +40,7 @@ OBJECTS = {
 
 # Dashboard Display Settings
 DISPLAY_CONFIG = {
-    'use_dual_setpoints': True,                # True = dual setpoint, False = single setpoint
+    'use_dual_setpoints': False,                # True = dual setpoint, False = single setpoint
     'site_display_name': SITE,                # How site appears on dashboard
     'company_name': 'Stasis Energy Group',     # Your company name
     'logo_url': 'https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png',
@@ -60,6 +55,12 @@ DEBUG_MODE = False                            # Set to True for development
 # END CLIENT CONFIGURATION
 # ============================================================================
 
+from flask import Flask, request, jsonify, send_from_directory
+import requests
+import base64
+from datetime import datetime
+
+app = Flask(__name__)
 
 # Basic auth header
 auth_header = {
