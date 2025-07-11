@@ -11,9 +11,9 @@ import os
 # ============================================================================
 
 # EnteliCloud Server Connection
-SERVER = "https://stasisenergy.entelicloud.com/"  # Your EnteliCloud server URL
-SITE = "UnivRedlands"                   # Site name in EnteliCloud
-DEVICE = "4145549"                              # Device ID number
+SERVER = "stasisenergy.entelicloud.com"       # Your EnteliCloud server URL (no https://)
+SITE = "UnivRedlands"                         # Site name in EnteliCloud
+DEVICE = "4145549"                            # Device ID number
 
 # Authentication Credentials
 USER = "stasis_api"                           # API username
@@ -31,8 +31,8 @@ OBJECTS = {
     
     # System status indicators
     'system_mode': 'multi-state-value,2',      # System mode (heating/cooling/deadband)
-    'peak_savings': 'binary-value,16',       # Peak demand savings mode
-    'fan_status': 'binary-output,1105',           # Supply fan on/off status
+    'peak_savings': 'binary-value,16',         # Peak demand savings mode
+    'fan_status': 'binary-output,1105',        # Supply fan on/off status
     
     # Device information
     'device_name': 'device,{DEVICE}/object-name',  # Controller device name
@@ -40,7 +40,7 @@ OBJECTS = {
 
 # Dashboard Display Settings
 DISPLAY_CONFIG = {
-    'use_dual_setpoints': False,                # True = dual setpoint, False = single setpoint
+    'use_dual_setpoints': False,               # True = dual setpoint, False = single setpoint
     'site_display_name': SITE,                # How site appears on dashboard
     'company_name': 'Stasis Energy Group',     # Your company name
     'logo_url': 'https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png',
@@ -198,11 +198,7 @@ def index():
             </div>
         </div>
         
-        <div class="config-info">
-            <h4>Controller Configuration:</h4>
-            <strong>Server:</strong> {SERVER} | <strong>Site:</strong> {SITE} | <strong>Device:</strong> {DEVICE} | 
-            <strong>Mode:</strong> {"Dual Setpoint" if DISPLAY_CONFIG['use_dual_setpoints'] else "Single Setpoint"}
-
+        <div class="card">
             <h3>Current Temperature</h3>
             <div class="temperature-circle" id="tempCircle">
                 <div class="temperature-value" id="currentTemp">--</div>
