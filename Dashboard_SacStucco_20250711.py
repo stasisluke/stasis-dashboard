@@ -21,6 +21,10 @@ DEVICE = "4145595"
 USER = "stasis_api"
 PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
 
+# Display Configuration - customize how titles appear on the dashboard
+DISPLAY_SITE_NAME = "Sacramento Stucco"  # Custom site name for display
+DISPLAY_DEVICE_NAME = "Zone Controller"  # Custom device name for display (leave empty to use actual device name)
+
 # Trend Log Configuration - you may need to adjust this instance number
 TEMP_TREND_LOG_INSTANCE = 27  # Adjust this to match your temperature trend log instance
 
@@ -184,8 +188,8 @@ def index():
                 <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
             </div>
             <div class="header-text">
-                <h1>{SITE}</h1>
-                <h2 id="deviceTitle">Device {DEVICE}</h2>
+                <h1>{DISPLAY_SITE_NAME}</h1>
+                <h2 id="deviceTitle">{DISPLAY_DEVICE_NAME if DISPLAY_DEVICE_NAME else 'Device ' + DEVICE}</h2>
                 <p class="powered-by">Thermal Energy Storage Dashboard</p>
             </div>
         </div>
@@ -337,10 +341,15 @@ def index():
                 modeText.textContent = 'Standby';
             }}
             
-            // Update device title - show device name if available
-            if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
+            // Update device title - use custom display name or actual device name
+            if ('{DISPLAY_DEVICE_NAME}') {{
+                // Use the custom display name from configuration
+                document.getElementById('deviceTitle').textContent = '{DISPLAY_DEVICE_NAME}';
+            }} else if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
+                // Use actual device name from BACnet if no custom name set
                 document.getElementById('deviceTitle').textContent = data.device_name;
             }} else {{
+                // Fallback to Device + number
                 document.getElementById('deviceTitle').textContent = `Device {DEVICE}`;
             }}
             
@@ -677,32 +686,3 @@ def debug_values():
             trend_test_data = response.json()
             debug_data['trend_log_test'] = {
                 'total_keys': len(trend_test_data),
-                'sample_keys': list(trend_test_data.keys())[:10],
-                'sample_record': None
-            }
-            # Get one sample record
-            for key, value in trend_test_data.items():
-                if key != '$base':
-                    debug_data['trend_log_test']['sample_record'] = value
-                    break
-        else:
-            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
-        
-        return jsonify(debug_data)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    print(f"Starting Enhanced Thermostat Dashboard Server...")
-    print(f"EnteliWeb Server: {SERVER}")
-    print(f"Site: {SITE}")
-    print(f"Device: {DEVICE}")
-    print(f"Temperature Trend Log Instance: {TEMP_TREND_LOG_INSTANCE}")
-    print(f"Dashboard URL: http://localhost:8000")
-    print(f"API Test: http://localhost:8000/api/thermostat")
-    print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
-    print(f"Debug API: http://localhost:8000/api/debug")
-    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
-    
-    app.run(host='0.0.0.0', port=8000, debug=True)
