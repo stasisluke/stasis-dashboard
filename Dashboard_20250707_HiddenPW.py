@@ -7,6 +7,13 @@ Easily adaptable for different controllers and EnteliCloud servers
 # ============================================================================
 # CLIENT CONFIGURATION - MODIFY THESE SETTINGS FOR EACH DEPLOYMENT
 # ============================================================================
+from flask import Flask, request, jsonify, send_from_directory
+import requests
+import base64
+import os
+from datetime import datetime
+
+app = Flask(__name__)
 
 # EnteliCloud Server Connection
 SERVER = "stasisenergy.entelicloud.com"  # Your EnteliCloud server URL
@@ -53,13 +60,6 @@ DEBUG_MODE = False                            # Set to True for development
 # END CLIENT CONFIGURATION
 # ============================================================================
 
-from flask import Flask, request, jsonify, send_from_directory
-import requests
-import base64
-import os
-from datetime import datetime
-
-app = Flask(__name__)
 
 # Basic auth header
 auth_header = {
