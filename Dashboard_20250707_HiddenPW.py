@@ -15,7 +15,7 @@ DEVICE = "10500"                              # Device ID number
 
 # Authentication Credentials
 USER = "stasis_api"                           # API username
-PASSWORD = "simpleapi"               # API password (or use env var)
+PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # API password
 
 # BACnet Object Mapping - Update these for your specific controller
 OBJECTS = {
@@ -60,10 +60,6 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-
-# Use environment variable for password if available
-if 'PASSWORD' in os.environ:
-    PASSWORD = os.environ['PASSWORD']
 
 # Basic auth header
 auth_header = {
@@ -186,16 +182,6 @@ def index():
         .last-updated {{ font-size: 0.9em; color: #666; text-align: center; margin-top: 10px; }}
         .btn {{ padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; background: #2196F3; color: white; margin: 5px; }}
         .btn:hover {{ background: #1976D2; }}
-        
-        .config-info {{
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 20px;
-            font-size: 0.9em;
-            color: #555;
-        }}
-        .config-info h4 {{ margin-bottom: 10px; color: #333; }}
     </style>
 </head>
 <body>
@@ -215,9 +201,7 @@ def index():
             <h4>Controller Configuration:</h4>
             <strong>Server:</strong> {SERVER} | <strong>Site:</strong> {SITE} | <strong>Device:</strong> {DEVICE} | 
             <strong>Mode:</strong> {"Dual Setpoint" if DISPLAY_CONFIG['use_dual_setpoints'] else "Single Setpoint"}
-        </div>
-        
-        <div class="card">
+
             <h3>Current Temperature</h3>
             <div class="temperature-circle" id="tempCircle">
                 <div class="temperature-value" id="currentTemp">--</div>
