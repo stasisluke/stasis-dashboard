@@ -787,6 +787,17 @@ def get_trend_data():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/test')
+def test_endpoint():
+    """Simple test endpoint to verify new code is deployed"""
+    print("TEST ENDPOINT CALLED - NEW CODE IS RUNNING!")
+    return jsonify({
+        'message': 'New code is working!',
+        'server': SERVER,
+        'device': DEVICE,
+        'timestamp': datetime.now().isoformat()
+    })
+
 @app.route('/api/debug')
 def debug_values():
     """Debug endpoint to see all configured objects and their raw values"""
