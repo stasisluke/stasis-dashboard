@@ -502,6 +502,7 @@ def get_thermostat_data():
     """
     API endpoint that fetches thermostat data using configurable object mapping
     """
+    print("=== NEW THERMOSTAT CODE RUNNING ===")
     print("=== Starting thermostat data fetch ===")
     try:
         data = {}
@@ -604,6 +605,7 @@ def get_thermostat_data():
             data['device_name'] = f'Device {DEVICE}'
         
         data['timestamp'] = datetime.now().isoformat()
+        data['debug_marker'] = 'NEW_CODE_RUNNING'  # This should appear in the response
         print(f"Final data: {data}")
         return jsonify(data)
         
