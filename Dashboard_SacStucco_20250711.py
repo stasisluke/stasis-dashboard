@@ -604,7 +604,7 @@ def get_thermostat_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def interpolate_gaps(rows, expected_interval_minutes=5):
+def interpolate_gaps(rows, expected_interval_minutes=5, time_range='7d'):
     """
     Fill gaps in temperature data with interpolated values
     """
@@ -783,7 +783,7 @@ def get_trend_data():
         
         # NEW: For 7d view, detect gaps and interpolate
         if time_range == '7d' and len(rows) > 1:
-            rows = interpolate_gaps(rows, expected_interval_minutes=5)
+            rows = interpolate_gaps(rows, expected_interval_minutes=5, time_range=time_range)
         
         for row in rows:
             del row['sort_time']
