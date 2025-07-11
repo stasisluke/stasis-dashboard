@@ -184,8 +184,8 @@ def index():
                 <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
             </div>
             <div class="header-text">
-                <h1>Stasis Energy Group</h1>
-                <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
+                <h1>{SITE}</h1>
+                <h2 id="deviceTitle">Device {DEVICE}</h2>
                 <p class="powered-by">Thermal Energy Storage Dashboard</p>
             </div>
         </div>
@@ -337,11 +337,11 @@ def index():
                 modeText.textContent = 'Standby';
             }}
             
-            // Update device title - show "Site : Device Name" format
+            // Update device title - show device name if available
             if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
-                document.getElementById('deviceTitle').textContent = `{SITE} : ${{data.device_name}}`;
+                document.getElementById('deviceTitle').textContent = data.device_name;
             }} else {{
-                document.getElementById('deviceTitle').textContent = `{SITE} : Device {DEVICE}`;
+                document.getElementById('deviceTitle').textContent = `Device {DEVICE}`;
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
