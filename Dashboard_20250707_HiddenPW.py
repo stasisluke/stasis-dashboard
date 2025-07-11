@@ -502,52 +502,42 @@ def get_thermostat_data():
     """
     API endpoint that fetches thermostat data using configurable object mapping
     """
-    print("=== NEW THERMOSTAT CODE RUNNING ===")
-    print("=== Starting thermostat data fetch ===")
     try:
         data = {}
+        debug_log = []  # Collect debug info to return in response
         
         # Helper function to fetch BACnet object value
         def fetch_object_value(object_id):
             url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{object_id}/present-value?alt=json"
-            print(f"Fetching {object_id} from: {url}")
+            debug_log.append(f"Fetching {object_id}")
             try:
                 response = requests.get(url, headers=auth_header, timeout=10)
-                print(f"Response for {object_id}: HTTP {response.status_code}")
+                debug_log.append(f"{object_id}: HTTP {response.status_code}")
                 if response.ok:
                     response_data = response.json()
-                    print(f"Response data for {object_id}: {response_data}")
+                    debug_log.append(f"{object_id} data: {str(response_data)[:100]}")
                     # Handle different response formats
-                    if isinstance(response_data, dict):
-                        if 'value' in response_data:
-                            print(f"Found value for {object_id}: {response_data['value']}")
-                            return response_data['value']
-                        elif '$base' in response_data and 'value' in response_data:
-                            print(f"Found $base value for {object_id}: {response_data['value']}")
-                            return response_data['value']
-                    print(f"Returning raw data for {object_id}: {response_data}")
+                    if isinstance(response_data, dict) and 'value' in response_data:
+                        debug_log.append(f"{object_id} value found: {response_data['value']}")
+                        return response_data['value']
                     return response_data
                 else:
-                    print(f"Failed to fetch {object_id}: HTTP {response.status_code}")
-                    print(f"Response text: {response.text}")
+                    debug_log.append(f"{object_id} failed: {response.text[:100]}")
                     return None
             except Exception as e:
-                print(f"Error fetching {object_id}: {e}")
+                debug_log.append(f"{object_id} error: {str(e)}")
                 return None
         
-        print("About to fetch temperature...")
         # Fetch temperature
+        debug_log.append("=== FETCHING TEMPERATURE ===")
         temp_value = fetch_object_value(OBJECTS['temperature'])
-        print(f"Temperature fetch result: {temp_value} (type: {type(temp_value)})")
         if temp_value is not None:
             data['temperature'] = float(temp_value)
-            print(f"Added temperature to data: {data['temperature']}")
+            debug_log.append(f"Temperature set to: {data['temperature']}")
         
-        print("About to fetch setpoints...")
-        # Fetch setpoints based on configuration
+        # Fetch setpoints based on configuration  
+        debug_log.append("=== FETCHING SETPOINTS ===")
         if DISPLAY_CONFIG['use_dual_setpoints']:
-            print("Using dual setpoints...")
-            # Dual setpoint system
             heating_sp = fetch_object_value(OBJECTS['heating_setpoint'])
             cooling_sp = fetch_object_value(OBJECTS['cooling_setpoint'])
             if heating_sp is not None:
@@ -555,25 +545,19 @@ def get_thermostat_data():
             if cooling_sp is not None:
                 data['cooling_setpoint'] = float(cooling_sp)
         else:
-            print("Using single setpoint...")
-            # Single setpoint system
             zone_sp = fetch_object_value(OBJECTS['zone_setpoint'])
             if zone_sp is not None:
                 data['zone_setpoint'] = float(zone_sp)
         
-        print("About to fetch system mode...")
-        # Fetch system mode (handle complex formats)
+        # Fetch system mode
+        debug_log.append("=== FETCHING SYSTEM MODE ===")
         mode_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['system_mode']}/present-value?alt=json"
         response = requests.get(mode_url, headers=auth_header, timeout=10)
         if response.ok:
             mode_data = response.json()
-            
-            # Handle different mode value formats
             mode_value = mode_data.get('value', '3')
             if isinstance(mode_value, dict) and 'enumerated' in mode_value:
-                # Handle Choice object format
                 mode_value = mode_value['enumerated'].get('value', '3')
-            
             try:
                 mode_number = int(str(mode_value))
                 mode_map = {1: 'Heating', 2: 'Cooling', 3: 'Deadband'}
@@ -581,19 +565,6 @@ def get_thermostat_data():
             except:
                 data['system_mode'] = 'Unknown'
         
-        print("About to fetch peak savings...")
-        # Fetch peak savings status
-        peak_value = fetch_object_value(OBJECTS['peak_savings'])
-        if peak_value is not None:
-            data['peak_savings'] = str(peak_value).lower() in ['active', 'on', 'true', '1']
-        
-        print("About to fetch fan status...")
-        # Fetch fan status
-        fan_value = fetch_object_value(OBJECTS['fan_status'])
-        if fan_value is not None:
-            data['fan_status'] = str(fan_value).lower() in ['active', 'on', 'true', '1']
-        
-        print("About to fetch device name...")
         # Fetch device name
         device_name_obj = OBJECTS['device_name'].format(DEVICE=DEVICE)
         device_name_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{device_name_obj}?alt=json"
@@ -605,15 +576,11 @@ def get_thermostat_data():
             data['device_name'] = f'Device {DEVICE}'
         
         data['timestamp'] = datetime.now().isoformat()
-        data['debug_marker'] = 'NEW_CODE_RUNNING'  # This should appear in the response
-        print(f"Final data: {data}")
+        data['debug_log'] = debug_log  # Include debug info in response
         return jsonify(data)
         
     except Exception as e:
-        print(f"Exception in thermostat endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'debug_log': debug_log if 'debug_log' in locals() else []})}
 
 @app.route('/api/trend')
 def get_trend_data():
