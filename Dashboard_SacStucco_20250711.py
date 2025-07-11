@@ -592,7 +592,7 @@ def get_trend_data():
             max_results = 300
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
-            max_results = 2020
+            max_results = 10000
         else:
             start_time = now - timedelta(hours=1)
             max_results = 20
