@@ -611,21 +611,37 @@ def get_trend_data():
         data = r.json()
         
         rows = []
-        for v in data.values():
-            if not isinstance(v, dict) or "timestamp" not in v:
+        for key, v in data.items():
+            # Skip the $base and next keys
+            if key in ['$base', 'next'] or not isinstance(v, dict) or "timestamp" not in v:
                 continue
+                
+            # Get the temperature value from logDatum
             ld = v.get("logDatum", dict())
             val = None
-            for k, w in ld.items():
-                if k.endswith("-value"):
-                    val = w.get("value") if isinstance(w, dict) else w
-                    break
+            
+            # Look for real-value specifically based on the debug data
+            if "real-value" in ld:
+                real_val = ld["real-value"]
+                if isinstance(real_val, dict) and "value" in real_val:
+                    val = real_val["value"]
+            
+            # Fallback to the original logic for other value types
+            if val is None:
+                for k, w in ld.items():
+                    if k.endswith("-value"):
+                        val = w.get("value") if isinstance(w, dict) else w
+                        break
+                        
             if val is None:
                 continue
             
             timestamp_str = v["timestamp"]["value"]
             try:
-                timestamp_dt = datetime.fromisoformat(timestamp_str.replace('T', ' '))
+                # Handle the timestamp format from debug data: "2025-07-11T04:45:00.02"
+                # Remove the fractional seconds part if it exists
+                clean_timestamp = timestamp_str.split('.')[0] if '.' in timestamp_str else timestamp_str
+                timestamp_dt = datetime.fromisoformat(clean_timestamp)
                 
                 # Only apply additional time filtering for short ranges to be more strict
                 if time_range in ['1h', '4h']:
@@ -646,7 +662,10 @@ def get_trend_data():
                 row['formatted_time'] = formatted_time
                 row['sort_time'] = timestamp_dt
                 rows.append(row)
-            except:
+                
+            except Exception as e:
+                print(f"DEBUG: Error parsing record {key}: {e}")
+                print(f"DEBUG: timestamp_str = {timestamp_str}")
                 continue
         
         rows.sort(key=lambda x: x['sort_time'])
