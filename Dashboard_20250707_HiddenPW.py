@@ -580,10 +580,9 @@ def get_trend_data():
     API endpoint that fetches trend log data for historical temperature chart
     """
     try:
-        # Get last week's data using published date range
         from datetime import datetime, timedelta
         
-        # Get data from last 7 days
+        # First try to get recent data (last 7 days)
         end_time = datetime.now()
         start_time = end_time - timedelta(days=7)
         
@@ -591,28 +590,61 @@ def get_trend_data():
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
         end_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
         
-        # Fetch trend log data from TL27 with date range
+        # Try with date range first
         trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
         
-        print(f"Fetching trend data from: {trend_url}")
+        print(f"Trying with date range: {trend_url}")
         response = requests.get(trend_url, headers=auth_header, timeout=30)
         
+        # If date range fails, try without date filter to get any available data
         if not response.ok:
-            print(f"HTTP Error: {response.status_code}")
+            print(f"Date range failed (HTTP {response.status_code}), trying without date filter...")
+            trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?alt=json"
+            response = requests.get(trend_url, headers=auth_header, timeout=30)
+        
+        # If still failing, try with max-results parameter
+        if not response.ok:
+            print(f"Basic call failed (HTTP {response.status_code}), trying with max-results...")
+            trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?max-results=100&alt=json"
+            response = requests.get(trend_url, headers=auth_header, timeout=30)
+        
+        if not response.ok:
+            print(f"All attempts failed. HTTP Error: {response.status_code}")
             print(f"Response: {response.text}")
-            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code}'}), 500
+            
+            # Try to check if the trend log object exists at all
+            tl_check_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}?alt=json"
+            check_response = requests.get(tl_check_url, headers=auth_header, timeout=10)
+            
+            if check_response.ok:
+                return jsonify({
+                    'error': f'Trend log exists but log-buffer access failed: HTTP {response.status_code}',
+                    'trend_log_properties': check_response.json()
+                }), 500
+            else:
+                return jsonify({
+                    'error': f'Trend log TL27 does not exist: HTTP {check_response.status_code}',
+                    'suggestion': 'Check /api/debug to see which trend logs are available'
+                }), 500
         
         trend_raw = response.json()
-        print(f"Raw trend response type: {type(trend_raw)}")
+        print(f"Successfully got response, type: {type(trend_raw)}")
         
         trend_data = []
         
         # Parse trend log entries according to EnteliCloud format
-        # Data comes as: {"sequence_number": {"timestamp": {"value": "..."}, "logDatum": {"real-value": {"value": "..."}}, ...}, ...}
-        
         if isinstance(trend_raw, dict):
-            sequence_numbers = [key for key in trend_raw.keys() if key != "$base"]
+            # Filter out metadata keys
+            sequence_numbers = [key for key in trend_raw.keys() if key != "$base" and key.isdigit()]
             print(f"Found {len(sequence_numbers)} sequence entries")
+            
+            # Debug: show first few keys
+            if len(sequence_numbers) > 0:
+                sample_keys = sorted(sequence_numbers, key=int)[:3]
+                print(f"Sample sequence numbers: {sample_keys}")
+                
+                for seq_num in sample_keys:
+                    print(f"Sample entry {seq_num}: {trend_raw[seq_num]}")
             
             for seq_num in sequence_numbers:
                 try:
@@ -623,9 +655,14 @@ def get_trend_data():
                     
                     # Extract timestamp
                     timestamp_obj = entry.get('timestamp', {})
+                    timestamp_str = None
                     if isinstance(timestamp_obj, dict) and 'value' in timestamp_obj:
                         timestamp_str = timestamp_obj['value']
-                    else:
+                    elif isinstance(timestamp_obj, str):
+                        timestamp_str = timestamp_obj
+                    
+                    if not timestamp_str:
+                        print(f"No timestamp found in entry {seq_num}")
                         continue
                     
                     # Extract value from logDatum
@@ -634,18 +671,15 @@ def get_trend_data():
                     
                     if isinstance(log_datum, dict):
                         # Try different value types
-                        if 'real-value' in log_datum:
-                            real_obj = log_datum['real-value']
-                            if isinstance(real_obj, dict) and 'value' in real_obj:
-                                value = float(real_obj['value'])
-                        elif 'unsigned-value' in log_datum:
-                            uint_obj = log_datum['unsigned-value']
-                            if isinstance(uint_obj, dict) and 'value' in uint_obj:
-                                value = float(uint_obj['value'])
-                        elif 'signed-value' in log_datum:
-                            int_obj = log_datum['signed-value']
-                            if isinstance(int_obj, dict) and 'value' in int_obj:
-                                value = float(int_obj['value'])
+                        for value_type in ['real-value', 'unsigned-value', 'signed-value']:
+                            if value_type in log_datum:
+                                value_obj = log_datum[value_type]
+                                if isinstance(value_obj, dict) and 'value' in value_obj:
+                                    value = float(value_obj['value'])
+                                    break
+                                elif isinstance(value_obj, (int, float)):
+                                    value = float(value_obj)
+                                    break
                     
                     if value is not None and timestamp_str:
                         # Parse timestamp (format: 2014-06-04T12:00:57.67)
@@ -664,6 +698,8 @@ def get_trend_data():
                         except ValueError as e:
                             print(f"Error parsing timestamp '{timestamp_str}': {e}")
                             continue
+                    else:
+                        print(f"Missing data in entry {seq_num}: timestamp={timestamp_str}, value={value}")
                     
                 except Exception as e:
                     print(f"Error processing sequence {seq_num}: {e}")
@@ -676,6 +712,7 @@ def get_trend_data():
                 'error': 'No valid data points found in trend log',
                 'debug_info': {
                     'url_used': trend_url,
+                    'response_keys': list(trend_raw.keys()) if isinstance(trend_raw, dict) else 'not_dict',
                     'raw_response_sample': str(trend_raw)[:1000] if trend_raw else 'empty'
                 }
             }), 500
@@ -735,7 +772,7 @@ def debug_values():
         
         # Check for trend logs - try different numbers
         for tl_num in [27, 1, 2, 3, 4, 5, 10, 20, 25, 26, 28, 29, 30]:
-            tl_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{tl_num}?alt=json"
+            tl_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{tl_num}/present-value?alt=json"
             try:
                 response = requests.get(tl_url, headers=auth_header, timeout=10)
                 if response.ok:
@@ -746,7 +783,7 @@ def debug_values():
                 debug_data['trend_log_check'][f'TL{tl_num}'] = f"Error: {str(e)}"
         
         # Also try to list all objects on the device
-        device_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}?alt=json"
+        device_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/present-value?alt=json"
         try:
             response = requests.get(device_url, headers=auth_header, timeout=10)
             if response.ok:
