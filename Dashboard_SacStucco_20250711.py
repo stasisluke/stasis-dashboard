@@ -576,7 +576,8 @@ def get_trend_data():
     try:
         time_range = request.args.get('range', '1h')
         
-        now = datetime.now()
+        # Use UTC time with proper timezone formatting for EnteliWeb
+        now = datetime.utcnow()
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
             max_results = 20
@@ -599,12 +600,13 @@ def get_trend_data():
         url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
         
         params = dict()
-        params["published-ge"] = start_time.isoformat()
-        params["published-le"] = now.isoformat()
+        # FIXED: Add timezone info (Z for UTC) to make EnteliWeb happy
+        params["published-ge"] = start_time.isoformat(timespec='seconds') + "Z"
+        params["published-le"] = now.isoformat(timespec='seconds') + "Z"
         params["alt"] = "json"
         params["max-results"] = max_results
         
-        print(f"DEBUG: Requesting {time_range} from {start_time.isoformat()} to {now.isoformat()}, max-results: {max_results}")
+        print(f"DEBUG: Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
         
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
@@ -642,12 +644,6 @@ def get_trend_data():
                 # Remove the fractional seconds part if it exists
                 clean_timestamp = timestamp_str.split('.')[0] if '.' in timestamp_str else timestamp_str
                 timestamp_dt = datetime.fromisoformat(clean_timestamp)
-                
-                # Only apply additional time filtering for short ranges to be more strict
-                if time_range in ['1h', '4h']:
-                    # For short ranges, be more strict about time filtering
-                    if timestamp_dt < start_time:
-                        continue
                 
                 if time_range in ['1h', '4h']:
                     formatted_time = timestamp_dt.strftime('%H:%M')
@@ -690,8 +686,8 @@ def get_trend_data():
         result['records'] = rows
         result['time_range'] = time_range
         result['actual_range'] = actual_range
-        result['start_time'] = start_time.isoformat()
-        result['end_time'] = now.isoformat()
+        result['start_time'] = start_time.isoformat() + "Z"
+        result['end_time'] = now.isoformat() + "Z"
         result['total_records'] = len(rows)
         
         return jsonify(result)
