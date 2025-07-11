@@ -580,7 +580,8 @@ def get_thermostat_data():
         return jsonify(data)
         
     except Exception as e:
-        return jsonify({'error': str(e), 'debug_log': debug_log if 'debug_log' in locals() else []})}
+        debug_info = debug_log if 'debug_log' in locals() else []
+        return jsonify({'error': str(e), 'debug_log': debug_info})}
 
 @app.route('/api/trend')
 def get_trend_data():
