@@ -686,3 +686,32 @@ def debug_values():
             trend_test_data = response.json()
             debug_data['trend_log_test'] = {
                 'total_keys': len(trend_test_data),
+                'sample_keys': list(trend_test_data.keys())[:10],
+                'sample_record': None
+            }
+            # Get one sample record
+            for key, value in trend_test_data.items():
+                if key != '$base':
+                    debug_data['trend_log_test']['sample_record'] = value
+                    break
+        else:
+            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
+        
+        return jsonify(debug_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    print(f"Starting Enhanced Thermostat Dashboard Server...")
+    print(f"EnteliWeb Server: {SERVER}")
+    print(f"Site: {SITE}")
+    print(f"Device: {DEVICE}")
+    print(f"Temperature Trend Log Instance: {TEMP_TREND_LOG_INSTANCE}")
+    print(f"Dashboard URL: http://localhost:8000")
+    print(f"API Test: http://localhost:8000/api/thermostat")
+    print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
+    print(f"Debug API: http://localhost:8000/api/debug")
+    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
+    
+    app.run(host='0.0.0.0', port=8000, debug=True)
