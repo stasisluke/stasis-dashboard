@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+@app.route('/api/test')
+def test_endpoint():
+    """Simple test endpoint to verify new code is deployed"""
+    print("TEST ENDPOINT CALLED - NEW CODE IS RUNNING!")
+    return jsonify({
+        'message': 'New code is working!',
+        'server': SERVER,
+        'device': DEVICE,
+        'timestamp': datetime.now().isoformat()
+    })#!/usr/bin/env python3
 """
 Configurable Web Server for Thermostat Dashboard
 Easily adaptable for different controllers and EnteliCloud servers
