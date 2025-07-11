@@ -695,4 +695,125 @@ def get_trend_data():
         if time_range == '7d' and len(final_rows) > 300:
             step = len(final_rows) // 300
             final_rows = final_rows[::step]
-            print(f"DEBUG
+            print(f"DEBUG: Downsampled to {len(final_rows)} records for 7d view")
+        
+        # Calculate actual time range for display
+        if final_rows:
+            actual_start = filtered_rows[0]['datetime']
+            actual_end = filtered_rows[-1]['datetime']
+            actual_duration = actual_end - actual_start
+            
+            if actual_duration.days > 0:
+                actual_range_text = f"{actual_duration.days}d {actual_duration.seconds//3600}h"
+            elif actual_duration.seconds >= 3600:
+                actual_range_text = f"{actual_duration.seconds//3600}h {(actual_duration.seconds%3600)//60}m"
+            else:
+                actual_range_text = f"{actual_duration.seconds//60}m"
+        else:
+            actual_range_text = "No data"
+        
+        print(f"DEBUG: Final result - {len(final_rows)} records for {time_range} (actual: {actual_range_text})")
+        
+        result = {
+            'records': final_rows,
+            'time_range': time_range,
+            'actual_range': actual_range_text,
+            'start_time': start_time.isoformat(),
+            'end_time': now.isoformat(),
+            'total_records': len(final_rows),
+            'requested_start': start_time.isoformat(),
+            'actual_start': filtered_rows[0]['datetime'].isoformat() if filtered_rows else None,
+            'actual_end': filtered_rows[-1]['datetime'].isoformat() if filtered_rows else None
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"DEBUG: Error in get_trend_data: {e}")
+        error_result = {
+            'error': str(e),
+            'records': [],
+            'total_records': 0,
+            'time_range': time_range,
+            'actual_range': 'Error'
+        }
+        return jsonify(error_result)
+
+@app.route('/api/debug')
+def debug_values():
+    """Debug endpoint to see raw values from BACnet objects"""
+    try:
+        debug_data = {}
+        
+        # Debug system mode
+        mv_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/present-value?alt=json"
+        response = requests.get(mv_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['system_mode_present_value'] = response.json()
+        
+        # Try to get state text for system mode
+        mv_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/state-text?alt=json"
+        response = requests.get(mv_text_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['system_mode_state_text'] = response.json()
+        
+        # Debug fan status
+        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
+        response = requests.get(fan_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['fan_status_present_value'] = response.json()
+        
+        # NEW: Debug trend log info
+        trend_info_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/object-name?alt=json"
+        response = requests.get(trend_info_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['trend_log_name'] = response.json()
+        else:
+            debug_data['trend_log_name_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
+        
+        # NEW: Test trend log with no time filter (get last 10 records)
+        trend_test_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=10&alt=json"
+        response = requests.get(trend_test_url, headers=auth_header, timeout=10)
+        if response.ok:
+            trend_test_data = response.json()
+            debug_data['trend_log_test'] = {
+                'total_keys': len(trend_test_data),
+                'sample_keys': list(trend_test_data.keys())[:10],
+                'sample_records': []
+            }
+            # Get a few sample records with timestamps
+            count = 0
+            for key, value in trend_test_data.items():
+                if key != '$base' and count < 3:
+                    if isinstance(value, dict) and 'timestamp' in value:
+                        debug_data['trend_log_test']['sample_records'].append({
+                            'key': key,
+                            'timestamp': value.get('timestamp', {}),
+                            'logDatum': value.get('logDatum', {})
+                        })
+                        count += 1
+        else:
+            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
+        
+        # NEW: Add current time for comparison
+        debug_data['current_server_time'] = datetime.now().isoformat()
+        debug_data['current_utc_time'] = datetime.utcnow().isoformat()
+        
+        return jsonify(debug_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    print(f"Starting Enhanced Thermostat Dashboard Server...")
+    print(f"EnteliWeb Server: {SERVER}")
+    print(f"Site: {SITE}")
+    print(f"Device: {DEVICE}")
+    print(f"Temperature Trend Log Instance: {TEMP_TREND_LOG_INSTANCE}")
+    print(f"Dashboard URL: http://localhost:8000")
+    print(f"API Test: http://localhost:8000/api/thermostat")
+    print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
+    print(f"Debug API: http://localhost:8000/api/debug")
+    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
+    
+    app.run(host='0.0.0.0', port=8000, debug=True)
