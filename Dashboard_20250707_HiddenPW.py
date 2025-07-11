@@ -80,7 +80,6 @@ def index():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{DISPLAY_CONFIG['company_name']} - {DISPLAY_CONFIG['site_display_name']} Device {DEVICE}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -293,13 +292,9 @@ def index():
                     }},
                     scales: {{
                         x: {{
-                            type: 'time',
-                            time: {{
-                                displayFormats: {{
-                                    hour: 'MMM DD HH:mm',
-                                    day: 'MMM DD'
-                                }}
-                            }}
+                            // Use linear scale initially, will convert to time scale when data loads
+                            type: 'linear',
+                            display: true
                         }},
                         y: {{
                             beginAtZero: false,
@@ -312,11 +307,8 @@ def index():
                     plugins: {{
                         tooltip: {{
                             callbacks: {{
-                                title: function(context) {{
-                                    return new Date(context[0].parsed.x).toLocaleString();
-                                }},
                                 label: function(context) {{
-                                    return `Temperature: ${{context.parsed.y.toFixed(1)}}°F`;
+                                    return `Temperature: ${{context.parsed.y ? context.parsed.y.toFixed(1) : '--'}}°F`;
                                 }}
                             }}
                         }}
@@ -371,7 +363,13 @@ def index():
         
         // Update chart with filtered data
         function updateChartData(data) {{
-            chart.data.labels = data.map(point => new Date(point.timestamp));
+            // Convert timestamps to readable labels for now (we'll improve this later)
+            const labels = data.map(point => {{
+                const date = new Date(point.timestamp);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {{hour: '2-digit', minute:'2-digit'}});
+            }});
+            
+            chart.data.labels = labels;
             chart.data.datasets[0].data = data.map(point => point.value);
             chart.update();
         }}
@@ -399,11 +397,23 @@ def index():
         
         // Fetch current data from our Python API
         async function fetchData() {{
+            console.log('Starting fetchData...');
             try {{
+                console.log('Making request to /api/thermostat');
                 const response = await fetch('/api/thermostat');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {{
+                    console.error('Response not OK:', response.status, response.statusText);
+                    alert('Error: HTTP ' + response.status);
+                    return;
+                }}
+                
                 const data = await response.json();
+                console.log('Response data:', data);
                 
                 if (data.error) {{
+                    console.error('API error:', data.error);
                     alert('Error: ' + data.error);
                     return;
                 }}
