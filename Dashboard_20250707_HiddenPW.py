@@ -521,18 +521,28 @@ def get_thermostat_data():
         
         # Fetch device name from DEV object
         device_name_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/object-name?alt=json"
+        print(f"DEBUG: Trying device name URL: {device_name_url}")
         response = requests.get(device_name_url, headers=auth_header, timeout=10)
+        print(f"DEBUG: Device name response status: {response.status_code}")
         if response.ok:
             device_name_data = response.json()
+            print(f"DEBUG: Device name data: {device_name_data}")
             data['device_name'] = device_name_data.get('value', f'Device {DEVICE}')
+            print(f"DEBUG: Final device name: {data['device_name']}")
         else:
+            print(f"DEBUG: Device name failed, trying backup")
             # Try device-name property as backup
             device_name_url2 = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/device-name?alt=json"
+            print(f"DEBUG: Trying backup URL: {device_name_url2}")
             response2 = requests.get(device_name_url2, headers=auth_header, timeout=10)
+            print(f"DEBUG: Backup response status: {response2.status_code}")
             if response2.ok:
                 device_name_data2 = response2.json()
+                print(f"DEBUG: Backup device name data: {device_name_data2}")
                 data['device_name'] = device_name_data2.get('value', f'Device {DEVICE}')
+                print(f"DEBUG: Final device name from backup: {data['device_name']}")
             else:
+                print(f"DEBUG: Both device name attempts failed")
                 data['device_name'] = f'Device {DEVICE}'
         return jsonify(data)
         
