@@ -284,7 +284,7 @@ def index():
             }});
         }}
         
-        // Fetch data from our Python API (EXACT COPY of your working code)
+        // Fetch current thermostat data (keeping all original functionality)
         async function fetchData() {{
             try {{
                 const response = await fetch('/api/thermostat');
@@ -295,15 +295,15 @@ def index():
                     return;
                 }}
                 
-                updateDisplay(data);
+                updateCurrentDisplay(data);
             }} catch (error) {{
                 console.error('Error fetching data:', error);
                 alert('Failed to fetch data: ' + error.message);
             }}
         }}
         
-        // Update display with new data (EXACT COPY of your working code)
-        function updateDisplay(data) {{
+        // Keep the exact same display update logic as original
+        function updateCurrentDisplay(data) {{
             // Update temperature circle
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
             const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
@@ -345,8 +345,6 @@ def index():
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-            
-            // NOTE: Removed the chart update from here - chart now uses trend logs
         }}
         
         // NEW: Load trend data for chart
@@ -415,11 +413,11 @@ def index():
             loadTrendData(currentTimeRange);
         }}
         
-        // Toggle auto-refresh (EXACT COPY of your working code)
+        // Toggle auto-refresh for current data (keeping original functionality)
         function toggleAutoRefresh() {{
             autoRefresh = !autoRefresh;
             if (autoRefresh) {{
-                refreshInterval = setInterval(fetchData, 5000);
+                refreshInterval = setInterval(fetchData, 5000); // Original 5 second interval
                 alert('Auto-refresh enabled (every 5 seconds)');
             }} else {{
                 clearInterval(refreshInterval);
@@ -430,8 +428,8 @@ def index():
         // Initialize on page load
         window.onload = function() {{
             initChart();
-            fetchData(); // Initial data fetch (your original working function)
-            loadTrendData('1h'); // Load initial trend data
+            fetchData(); // Get current data (original function)
+            loadTrendData('1h'); // Load initial trend data for chart
         }};
     </script>
 </body>
@@ -534,17 +532,9 @@ def get_thermostat_data():
 
 @app.route('/api/trends')
 def get_trend_data():
-    """
-    API endpoint to fetch trend log data for charting - using working method from your code
-    """
-    import sys
-    debug_info = []
-    
     try:
         time_range = request.args.get('range', '1h')
-        debug_info.append(f"Time range: {time_range}")
         
-        # Calculate time range
         now = datetime.now()
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
@@ -559,156 +549,75 @@ def get_trend_data():
         else:
             start_time = now - timedelta(hours=1)
         
-        # Format times for API (matching your working code format)
-        start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = now.strftime('%Y-%m-%dT%H:%M:%S')
+        url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
         
-        debug_info.append(f"Time window: {start_str} to {end_str}")
+        params = dict()
+        params["published-ge"] = start_time.isoformat()
+        params["published-le"] = now.isoformat()
+        params["alt"] = "json"
+        params["max-results"] = 50000
         
-        # Fetch trend log data using YOUR working method
-        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
+        r = requests.get(url, params=params, headers=auth_header, timeout=30)
+        r.raise_for_status()
+        data = r.json()
         
-        # Use params dict like your working code
-        params = {{
-            "published-ge": start_str,
-            "published-le": end_str,
-            "alt": "json",
-            "max-results": 1000000
-        }}
-        
-        debug_info.append(f"Trend URL: {trend_url}")
-        debug_info.append(f"Params: {params}")
-        
-        # Force output
-        print(f"TREND DEBUG: {debug_info}")
-        sys.stdout.flush()
-        
-        # Use params parameter like your working code
-        response = requests.get(trend_url, params=params, headers=auth_header, timeout=30)
-        
-        debug_info.append(f"Response status: {response.status_code}")
-        
-        if not response.ok:
-            error_text = response.text[:200] if response.text else "No response text"
-            debug_info.append(f"Error response: {error_text}")
-            return jsonify({{
-                'error': f'Failed to fetch trend data: HTTP {response.status_code}',
-                'debug_info': debug_info
-            }}), 500
-        
-        trend_data = response.json()
-        
-        # Exclude metadata keys (like your working code)
-        records_data = {{k: v for k, v in trend_data.items() if k not in {{"$base", "nodeType", "next"}}}}
-        total_keys = len(records_data)
-        debug_info.append(f"Total data records: {total_keys}")
-        
-        # Show some sample keys
-        sample_keys = list(records_data.keys())[:5]
-        debug_info.append(f"Sample keys: {sample_keys}")
-        
-        if total_keys == 0:
-            debug_info.append("No data records found, trying without time filter")
-            # Try without time filter to see if there's any data at all
-            test_params = {{"alt": "json", "max-results": 5}}
-            
-            test_response = requests.get(trend_url, params=test_params, headers=auth_header, timeout=30)
-            debug_info.append(f"No-filter response status: {test_response.status_code}")
-            
-            if test_response.ok:
-                test_data = test_response.json()
-                test_records = {{k: v for k, v in test_data.items() if k not in {{"$base", "nodeType", "next"}}}}
-                debug_info.append(f"No-filter total records: {len(test_records)}")
-                if len(test_records) > 0:
-                    sample_key = next(iter(test_records.keys()))
-                    debug_info.append(f"Sample record structure: {test_records[sample_key]}")
-        
-        # Process the trend data using YOUR working method
-        records = []
-        processed_count = 0
-        
-        for seq, record in records_data.items():
-            if not isinstance(record, dict):
+        rows = []
+        for v in data.values():
+            if not isinstance(v, dict) or "timestamp" not in v:
                 continue
-                
-            processed_count += 1
-            if processed_count <= 2:  # Log first 2 records in debug
-                debug_info.append(f"Processing record {seq}: {record}")
-                
+            ld = v.get("logDatum", dict())
+            val = None
+            for k, w in ld.items():
+                if k.endswith("-value"):
+                    val = w.get("value") if isinstance(w, dict) else w
+                    break
+            if val is None:
+                continue
+            
+            timestamp_str = v["timestamp"]["value"]
             try:
-                # Extract timestamp (your method)
-                timestamp = record.get("timestamp", {{}}).get("value")
-                if not timestamp:
-                    continue
-                    
-                # Extract the value from logDatum (YOUR working method)
-                log_datum = record.get("logDatum", {{}})
-                temp_value = None
+                timestamp_dt = datetime.fromisoformat(timestamp_str.replace('T', ' '))
                 
-                if processed_count <= 2:
-                    debug_info.append(f"Log datum: {log_datum}")
+                if time_range in ['1h', '4h']:
+                    formatted_time = timestamp_dt.strftime('%H:%M')
+                elif time_range in ['12h', '24h']:
+                    formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
+                else:
+                    formatted_time = timestamp_dt.strftime('%m/%d')
                 
-                if isinstance(log_datum, dict):
-                    for k, v in log_datum.items():
-                        if k != "$base":
-                            temp_value = v.get("value") if isinstance(v, dict) else v
-                            break
-                
-                if timestamp and temp_value is not None:
-                    # Parse timestamp
-                    timestamp_dt = datetime.fromisoformat(timestamp.replace('T', ' '))
-                    
-                    # Format time for display
-                    if time_range in ['1h', '4h']:
-                        formatted_time = timestamp_dt.strftime('%H:%M')
-                    elif time_range in ['12h', '24h']:
-                        formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
-                    else:  # 7d
-                        formatted_time = timestamp_dt.strftime('%m/%d')
-                    
-                    records.append({{
-                        'sequence': seq,
-                        'timestamp': timestamp,
-                        'temperature': float(temp_value),
-                        'formatted_time': formatted_time
-                    }})
-                    
-                    if processed_count <= 2:
-                        debug_info.append(f"Added record: temp={temp_value}, time={formatted_time}")
-                    
-            except Exception as e:
-                debug_info.append(f"Error processing record {seq}: {str(e)}")
+                row = dict()
+                row['timestamp'] = timestamp_str
+                row['temperature'] = float(val)
+                row['formatted_time'] = formatted_time
+                row['sort_time'] = timestamp_dt
+                rows.append(row)
+            except:
                 continue
         
-        # Sort records by timestamp
-        records.sort(key=lambda x: x['timestamp'])
+        rows.sort(key=lambda x: x['sort_time'])
         
-        debug_info.append(f"Final records count: {len(records)}")
+        for row in rows:
+            del row['sort_time']
         
-        # For longer time ranges, we might want to downsample the data
-        if time_range == '7d' and len(records) > 200:
-            # Take every nth record to reduce data points
-            step = len(records) // 200
-            records = records[::step]
-            debug_info.append(f"Downsampled to {len(records)} records")
+        if time_range == '7d' and len(rows) > 200:
+            step = len(rows) // 200
+            rows = rows[::step]
         
-        return jsonify({{
-            'records': records,
-            'time_range': time_range,
-            'start_time': start_str,
-            'end_time': end_str,
-            'total_records': len(records),
-            'debug_info': debug_info
-        }})
+        result = dict()
+        result['records'] = rows
+        result['time_range'] = time_range
+        result['start_time'] = start_time.isoformat()
+        result['end_time'] = now.isoformat()
+        result['total_records'] = len(rows)
+        
+        return jsonify(result)
         
     except Exception as e:
-        debug_info.append(f"Exception: {str(e)}")
-        import traceback
-        debug_info.append(f"Traceback: {traceback.format_exc()}")
-        return jsonify({{
-            'error': str(e),
-            'debug_info': debug_info
-        }}), 500
+        error_result = dict()
+        error_result['error'] = str(e)
+        error_result['records'] = []
+        error_result['total_records'] = 0
+        return jsonify(error_result)
 
 @app.route('/api/debug')
 def debug_values():
