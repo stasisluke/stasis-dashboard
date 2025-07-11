@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Integrated Web Server for Thermostat Dashboard
+Integrated Web Server for Thermostat Dashboard with Trend Log Support
 Serves the HTML file and provides API endpoints that work just like your existing Python code
+Now includes trend log data for historical charting
 """
 
 from flask import Flask, request, jsonify, send_from_directory
 import requests
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 
 app = Flask(__name__)
 
@@ -18,6 +20,10 @@ SITE = "Rancho Family YMCA"
 DEVICE = "10500"
 USER = "stasis_api"
 PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
+
+# Trend Log Configuration - you may need to adjust these instance numbers
+TEMP_TREND_LOG_INSTANCE = 1  # Adjust this to match your temperature trend log instance
+SETPOINT_TREND_LOG_INSTANCE = 2  # Adjust this if you have a setpoint trend log
 
 # Basic auth header (exactly like your Python code)
 auth_header = {
@@ -139,10 +145,37 @@ def index():
         .status-item {{ text-align: center; padding: 15px; background: rgba(0, 0, 0, 0.05); border-radius: 10px; }}
         .status-value {{ font-size: 1.5em; font-weight: bold; color: #2196F3; }}
         .status-label {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
-        .chart-container {{ position: relative; height: 300px; margin-top: 20px; }}
+        .chart-container {{ position: relative; height: 400px; margin-top: 20px; }}
+        .chart-controls {{
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }}
+        .time-range-btn {{
+            padding: 8px 16px;
+            border: 2px solid #2196F3;
+            background: white;
+            color: #2196F3;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }}
+        .time-range-btn:hover {{
+            background: #2196F3;
+            color: white;
+        }}
+        .time-range-btn.active {{
+            background: #2196F3;
+            color: white;
+        }}
         .last-updated {{ font-size: 0.9em; color: #666; text-align: center; margin-top: 10px; }}
         .btn {{ padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; background: #2196F3; color: white; margin: 5px; }}
         .btn:hover {{ background: #1976D2; }}
+        .loading {{ text-align: center; color: #666; font-style: italic; }}
+        .error {{ color: #f44336; text-align: center; }}
     </style>
 </head>
 <body>
@@ -171,14 +204,23 @@ def index():
         
         <div class="card">
             <h3>Temperature History</h3>
+            <div class="chart-controls">
+                <button class="time-range-btn active" onclick="loadTrendData('1h')">Last Hour</button>
+                <button class="time-range-btn" onclick="loadTrendData('4h')">Last 4 Hours</button>
+                <button class="time-range-btn" onclick="loadTrendData('12h')">Last 12 Hours</button>
+                <button class="time-range-btn" onclick="loadTrendData('24h')">Last 24 Hours</button>
+                <button class="time-range-btn" onclick="loadTrendData('7d')">Last 7 Days</button>
+            </div>
             <div class="chart-container">
                 <canvas id="temperatureChart"></canvas>
             </div>
+            <div id="chartStatus" class="loading">Loading chart data...</div>
         </div>
         
         <div class="card">
-            <button class="btn" onclick="fetchData()">Refresh Data</button>
+            <button class="btn" onclick="fetchData()">Refresh Current Data</button>
             <button class="btn" onclick="toggleAutoRefresh()">Toggle Auto-Refresh</button>
+            <button class="btn" onclick="refreshChart()">Refresh Chart</button>
         </div>
     </div>
 
@@ -186,6 +228,7 @@ def index():
         let chart;
         let autoRefresh = false;
         let refreshInterval;
+        let currentTimeRange = '1h';
         
         // Initialize chart
         function initChart() {{
@@ -200,19 +243,50 @@ def index():
                         borderColor: '#2196F3',
                         backgroundColor: 'rgba(33, 150, 243, 0.1)',
                         tension: 0.4,
-                        fill: true
+                        fill: false,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
                     }}]
                 }},
                 options: {{
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {{ y: {{ beginAtZero: false }} }}
+                    interaction: {{
+                        intersect: false,
+                        mode: 'index'
+                    }},
+                    scales: {{
+                        x: {{
+                            display: true,
+                            title: {{
+                                display: true,
+                                text: 'Time'
+                            }}
+                        }},
+                        y: {{
+                            display: true,
+                            title: {{
+                                display: true,
+                                text: 'Temperature (°F)'
+                            }},
+                            beginAtZero: false
+                        }}
+                    }},
+                    plugins: {{
+                        tooltip: {{
+                            callbacks: {{
+                                label: function(context) {{
+                                    return `Temperature: ${{context.parsed.y.toFixed(1)}}°F`;
+                                }}
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }}
         
-        // Fetch data from our Python API
-        async function fetchData() {{
+        // Fetch current thermostat data
+        async function fetchCurrentData() {{
             try {{
                 const response = await fetch('/api/thermostat');
                 const data = await response.json();
@@ -222,15 +296,46 @@ def index():
                     return;
                 }}
                 
-                updateDisplay(data);
+                updateCurrentDisplay(data);
             }} catch (error) {{
-                console.error('Error fetching data:', error);
-                alert('Failed to fetch data: ' + error.message);
+                console.error('Error fetching current data:', error);
+                alert('Failed to fetch current data: ' + error.message);
             }}
         }}
         
-        // Update display with new data
-        function updateDisplay(data) {{
+        // Load trend data for chart
+        async function loadTrendData(timeRange) {{
+            try {{
+                document.getElementById('chartStatus').textContent = 'Loading trend data...';
+                document.getElementById('chartStatus').className = 'loading';
+                
+                // Update active button
+                document.querySelectorAll('.time-range-btn').forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+                currentTimeRange = timeRange;
+                
+                const response = await fetch(`/api/trends?range=${{timeRange}}`);
+                const data = await response.json();
+                
+                if (data.error) {{
+                    document.getElementById('chartStatus').textContent = 'Error loading trend data: ' + data.error;
+                    document.getElementById('chartStatus').className = 'error';
+                    return;
+                }}
+                
+                updateChart(data);
+                document.getElementById('chartStatus').textContent = `Loaded ${{data.records.length}} data points`;
+                document.getElementById('chartStatus').className = 'last-updated';
+                
+            }} catch (error) {{
+                console.error('Error fetching trend data:', error);
+                document.getElementById('chartStatus').textContent = 'Failed to load trend data: ' + error.message;
+                document.getElementById('chartStatus').className = 'error';
+            }}
+        }}
+        
+        // Update current temperature display
+        function updateCurrentDisplay(data) {{
             // Update temperature circle
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
             const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
@@ -264,7 +369,7 @@ def index():
                 modeText.textContent = 'Standby';
             }}
             
-            // Update device title - show "Site : Device Name" format
+            // Update device title
             if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
                 document.getElementById('deviceTitle').textContent = `{SITE} : ${{data.device_name}}`;
             }} else {{
@@ -272,28 +377,40 @@ def index():
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-            
-            // Add to chart
-            if (data.temperature) {{
-                const now = new Date().toLocaleTimeString();
-                chart.data.labels.push(now);
-                chart.data.datasets[0].data.push(data.temperature);
-                
-                // Keep only last 20 points
-                if (chart.data.labels.length > 20) {{
-                    chart.data.labels.shift();
-                    chart.data.datasets[0].data.shift();
-                }}
-                
-                chart.update();
-            }}
         }}
         
-        // Toggle auto-refresh
+        // Update chart with trend data
+        function updateChart(trendData) {{
+            if (!trendData.records || trendData.records.length === 0) {{
+                chart.data.labels = [];
+                chart.data.datasets[0].data = [];
+                chart.update();
+                return;
+            }}
+            
+            const labels = [];
+            const temperatures = [];
+            
+            trendData.records.forEach(record => {{
+                labels.push(record.formatted_time);
+                temperatures.push(record.temperature);
+            }});
+            
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = temperatures;
+            chart.update();
+        }}
+        
+        // Refresh chart with current time range
+        function refreshChart() {{
+            loadTrendData(currentTimeRange);
+        }}
+        
+        // Toggle auto-refresh for current data (keeping original functionality)
         function toggleAutoRefresh() {{
             autoRefresh = !autoRefresh;
             if (autoRefresh) {{
-                refreshInterval = setInterval(fetchData, 5000);
+                refreshInterval = setInterval(fetchData, 5000); // Original 5 second interval
                 alert('Auto-refresh enabled (every 5 seconds)');
             }} else {{
                 clearInterval(refreshInterval);
@@ -304,7 +421,8 @@ def index():
         // Initialize on page load
         window.onload = function() {{
             initChart();
-            fetchData(); // Initial data fetch
+            fetchData(); // Get current data (original function)
+            loadTrendData('1h'); // Load initial trend data for chart
         }};
     </script>
 </body>
@@ -340,16 +458,11 @@ def get_thermostat_data():
             mode_data = response.json()
             mode_value = mode_data.get('value', '3')
             
-            # Debug print
-            print(f"DEBUG: mode_value = {mode_value}, type = {type(mode_value)}")
-            
             # Convert string to integer
             try:
                 mode_number = int(mode_value)
-                print(f"DEBUG: mode_number = {mode_number}")
             except:
                 mode_number = 3
-                print(f"DEBUG: Failed to convert, using default 3")
             
             # Map numeric values to text
             mode_map = {
@@ -359,14 +472,12 @@ def get_thermostat_data():
             }
             
             mode_text = mode_map.get(mode_number, 'Deadband')
-            print(f"DEBUG: mode_text = {mode_text}")
             data['system_mode'] = mode_text
             
             # Set heating and cooling based on mode
             data['heating'] = mode_number == 1
             data['cooling'] = mode_number == 2
         else:
-            print(f"DEBUG: Failed to get MV2 data")
             data['system_mode'] = 'Error'
         
         # Fetch peak savings mode status (BV2025)
@@ -376,6 +487,8 @@ def get_thermostat_data():
             peak_data = response.json()
             peak_value = peak_data.get('value')
             data['peak_savings'] = peak_value == 'active' or peak_value == 'Active' or peak_value == 'On' or peak_value == True or peak_value == 1
+        
+        # Fetch fan status (BO1)
         fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,1/present-value?alt=json"
         response = requests.get(fan_url, headers=auth_header, timeout=10)
         if response.ok:
@@ -390,17 +503,116 @@ def get_thermostat_data():
             device_name_data = response.json()
             data['device_name'] = device_name_data.get('value', f'Device {DEVICE}')
         else:
-            # Try device-name property as backup
-            device_name_url2 = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/device-name?alt=json"
-            response2 = requests.get(device_name_url2, headers=auth_header, timeout=10)
-            if response2.ok:
-                device_name_data2 = response2.json()
-                data['device_name'] = device_name_data2.get('value', f'Device {DEVICE}')
-            else:
-                data['device_name'] = f'Device {DEVICE}'
+            data['device_name'] = f'Device {DEVICE}'
+        
         return jsonify(data)
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trends')
+def get_trend_data():
+    """
+    API endpoint to fetch trend log data for charting
+    Supports different time ranges: 1h, 4h, 12h, 24h, 7d
+    """
+    try:
+        time_range = request.args.get('range', '1h')
+        
+        # Calculate time range
+        now = datetime.now()
+        if time_range == '1h':
+            start_time = now - timedelta(hours=1)
+        elif time_range == '4h':
+            start_time = now - timedelta(hours=4)
+        elif time_range == '12h':
+            start_time = now - timedelta(hours=12)
+        elif time_range == '24h':
+            start_time = now - timedelta(hours=24)
+        elif time_range == '7d':
+            start_time = now - timedelta(days=7)
+        else:
+            start_time = now - timedelta(hours=1)
+        
+        # Format times for API (yyyy-mm-ddThh:mm:ss)
+        start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+        end_str = now.strftime('%Y-%m-%dT%H:%M:%S')
+        
+        # Fetch trend log data
+        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
+        
+        print(f"DEBUG: Fetching trend data from {trend_url}")
+        
+        response = requests.get(trend_url, headers=auth_header, timeout=30)
+        
+        if not response.ok:
+            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code}'}), 500
+        
+        trend_data = response.json()
+        
+        # Process the trend data
+        records = []
+        
+        # The response is a dictionary where keys are sequence numbers
+        for seq_num, record in trend_data.items():
+            if seq_num == '$base':  # Skip the base property
+                continue
+                
+            try:
+                # Extract timestamp
+                timestamp_str = record['timestamp']['value']
+                timestamp = datetime.fromisoformat(timestamp_str.replace('T', ' '))
+                
+                # Extract temperature value
+                log_datum = record['logDatum']
+                temp_value = None
+                
+                if 'real-value' in log_datum:
+                    temp_value = float(log_datum['real-value']['value'])
+                elif 'unsigned-value' in log_datum:
+                    temp_value = float(log_datum['unsigned-value']['value'])
+                elif 'signed-value' in log_datum:
+                    temp_value = float(log_datum['signed-value']['value'])
+                
+                if temp_value is not None:
+                    # Format time for display
+                    if time_range in ['1h', '4h']:
+                        formatted_time = timestamp.strftime('%H:%M')
+                    elif time_range in ['12h', '24h']:
+                        formatted_time = timestamp.strftime('%m/%d %H:%M')
+                    else:  # 7d
+                        formatted_time = timestamp.strftime('%m/%d')
+                    
+                    records.append({
+                        'sequence': seq_num,
+                        'timestamp': timestamp_str,
+                        'temperature': temp_value,
+                        'formatted_time': formatted_time
+                    })
+                    
+            except Exception as e:
+                print(f"DEBUG: Error processing record {seq_num}: {e}")
+                continue
+        
+        # Sort records by timestamp
+        records.sort(key=lambda x: x['timestamp'])
+        
+        # For longer time ranges, we might want to downsample the data
+        if time_range == '7d' and len(records) > 200:
+            # Take every nth record to reduce data points
+            step = len(records) // 200
+            records = records[::step]
+        
+        return jsonify({
+            'records': records,
+            'time_range': time_range,
+            'start_time': start_str,
+            'end_time': end_str,
+            'total_records': len(records)
+        })
+        
+    except Exception as e:
+        print(f"DEBUG: Error in get_trend_data: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
@@ -427,18 +639,27 @@ def debug_values():
         if response.ok:
             debug_data['bo1_present_value'] = response.json()
         
+        # Debug trend log info
+        trend_info_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/object-name?alt=json"
+        response = requests.get(trend_info_url, headers=auth_header, timeout=10)
+        if response.ok:
+            debug_data['trend_log_name'] = response.json()
+        
         return jsonify(debug_data)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"Starting Thermostat Dashboard Server...")
+    print(f"Starting Enhanced Thermostat Dashboard Server...")
     print(f"EnteliWeb Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
+    print(f"Temperature Trend Log Instance: {TEMP_TREND_LOG_INSTANCE}")
     print(f"Dashboard URL: http://localhost:8000")
     print(f"API Test: http://localhost:8000/api/thermostat")
-    print("\nMake sure to update the PASSWORD variable with your actual password!")
+    print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
+    print(f"Debug API: http://localhost:8000/api/debug")
+    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
     
     app.run(host='0.0.0.0', port=8000, debug=True)
