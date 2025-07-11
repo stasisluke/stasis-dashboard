@@ -22,7 +22,8 @@ PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # API password
 # BACnet Object Mapping - Update these for your specific controller
 OBJECTS = {
     # Temperature readings
-    'temperature': 'analog-input,201001',      # Current zone temperature sensor
+    'temperature': 'analog-input,201001',      # Current zone temperature sensor (for display)
+    'trend_temperature': 'analog-value,1',     # Temperature for trend log (AV1)
     
     # Setpoint controls (configure based on your system type)
     'zone_setpoint': 'analog-value,1',         # Single zone setpoint (if using single setpoint)
@@ -36,6 +37,7 @@ OBJECTS = {
     
     # Device information
     'device_name': 'device,{DEVICE}/object-name',  # Controller device name
+    'trend_log': 'trend-log,27',               # Temperature trend log (TL27)
 }
 
 # Dashboard Display Settings
@@ -78,6 +80,7 @@ def index():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{DISPLAY_CONFIG['company_name']} - {DISPLAY_CONFIG['site_display_name']} Device {DEVICE}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -183,6 +186,29 @@ def index():
         .last-updated {{ font-size: 0.9em; color: #666; text-align: center; margin-top: 10px; }}
         .btn {{ padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; background: #2196F3; color: white; margin: 5px; }}
         .btn:hover {{ background: #1976D2; }}
+        .chart-controls {{
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }}
+        .chart-controls label {{
+            font-weight: 600;
+            color: #333;
+        }}
+        .chart-controls input {{
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }}
+        .chart-controls span {{
+            color: #666;
+        }}
     </style>
 </head>
 <body>
@@ -210,7 +236,17 @@ def index():
         </div>
         
         <div class="card">
-            <h3>Temperature History</h3>
+            <h3>Temperature History (Last 7 Days)</h3>
+            <div class="chart-controls">
+                <label for="dateRange">Select Date Range:</label>
+                <input type="datetime-local" id="startDate" />
+                <span> to </span>
+                <input type="datetime-local" id="endDate" />
+                <button class="btn" onclick="updateChartRange()">Update Chart</button>
+                <button class="btn" onclick="setQuickRange('24h')">Last 24h</button>
+                <button class="btn" onclick="setQuickRange('3d')">Last 3 Days</button>
+                <button class="btn" onclick="setQuickRange('7d')">Last 7 Days</button>
+            </div>
             <div class="chart-container">
                 <canvas id="temperatureChart"></canvas>
             </div>
@@ -227,6 +263,7 @@ def index():
         let chart;
         let autoRefresh = false;
         let refreshInterval;
+        let trendData = []; // Store all trend log data
         const useDualSetpoints = {str(DISPLAY_CONFIG['use_dual_setpoints']).lower()};
         
         // Initialize chart
@@ -241,19 +278,126 @@ def index():
                         data: [],
                         borderColor: '#2196F3',
                         backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                        tension: 0.4,
-                        fill: true
+                        tension: 0.1,
+                        fill: true,
+                        pointRadius: 1,
+                        pointHoverRadius: 4
                     }}]
                 }},
                 options: {{
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {{ y: {{ beginAtZero: false }} }}
+                    interaction: {{
+                        intersect: false,
+                        mode: 'index'
+                    }},
+                    scales: {{
+                        x: {{
+                            type: 'time',
+                            time: {{
+                                displayFormats: {{
+                                    hour: 'MMM DD HH:mm',
+                                    day: 'MMM DD'
+                                }}
+                            }}
+                        }},
+                        y: {{
+                            beginAtZero: false,
+                            title: {{
+                                display: true,
+                                text: 'Temperature (°F)'
+                            }}
+                        }}
+                    }},
+                    plugins: {{
+                        tooltip: {{
+                            callbacks: {{
+                                title: function(context) {{
+                                    return new Date(context[0].parsed.x).toLocaleString();
+                                }},
+                                label: function(context) {{
+                                    return `Temperature: ${{context.parsed.y.toFixed(1)}}°F`;
+                                }}
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }}
         
-        // Fetch data from our Python API
+        // Set quick date ranges
+        function setQuickRange(range) {{
+            const now = new Date();
+            const start = new Date();
+            
+            switch(range) {{
+                case '24h':
+                    start.setHours(now.getHours() - 24);
+                    break;
+                case '3d':
+                    start.setDate(now.getDate() - 3);
+                    break;
+                case '7d':
+                    start.setDate(now.getDate() - 7);
+                    break;
+            }}
+            
+            document.getElementById('startDate').value = start.toISOString().slice(0, 16);
+            document.getElementById('endDate').value = now.toISOString().slice(0, 16);
+            updateChartRange();
+        }}
+        
+        // Update chart with selected date range
+        function updateChartRange() {{
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (!startDate || !endDate) {{
+                alert('Please select both start and end dates');
+                return;
+            }}
+            
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            // Filter trend data to selected range
+            const filteredData = trendData.filter(point => {{
+                const pointDate = new Date(point.timestamp);
+                return pointDate >= start && pointDate <= end;
+            }});
+            
+            updateChartData(filteredData);
+        }}
+        
+        // Update chart with filtered data
+        function updateChartData(data) {{
+            chart.data.labels = data.map(point => new Date(point.timestamp));
+            chart.data.datasets[0].data = data.map(point => point.value);
+            chart.update();
+        }}
+        
+        // Fetch trend log data
+        async function fetchTrendData() {{
+            try {{
+                const response = await fetch('/api/trend');
+                const data = await response.json();
+                
+                if (data.error) {{
+                    console.error('Trend data error:', data.error);
+                    return;
+                }}
+                
+                trendData = data.trend_data || [];
+                
+                // Set default to last 24 hours
+                setQuickRange('24h');
+                
+            }} catch (error) {{
+                console.error('Error fetching trend data:', error);
+            }}
+        }}
+        
+        // Fetch current data from our Python API
         async function fetchData() {{
             try {{
                 const response = await fetch('/api/thermostat');
@@ -319,29 +463,14 @@ def index():
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-            
-            // Add to chart
-            if (data.temperature) {{
-                const now = new Date().toLocaleTimeString();
-                chart.data.labels.push(now);
-                chart.data.datasets[0].data.push(data.temperature);
-                
-                // Keep only last 20 points
-                if (chart.data.labels.length > 20) {{
-                    chart.data.labels.shift();
-                    chart.data.datasets[0].data.shift();
-                }}
-                
-                chart.update();
-            }}
         }}
         
         // Toggle auto-refresh
         function toggleAutoRefresh() {{
             autoRefresh = !autoRefresh;
             if (autoRefresh) {{
-                refreshInterval = setInterval(fetchData, 5000);
-                alert('Auto-refresh enabled (every 5 seconds)');
+                refreshInterval = setInterval(fetchData, 30000); // Every 30 seconds for current temp
+                alert('Auto-refresh enabled (every 30 seconds)');
             }} else {{
                 clearInterval(refreshInterval);
                 alert('Auto-refresh disabled');
@@ -351,7 +480,8 @@ def index():
         // Initialize on page load
         window.onload = function() {{
             initChart();
-            fetchData(); // Initial data fetch
+            fetchData(); // Get current temperature
+            fetchTrendData(); // Get historical data
         }};
     </script>
 </body>
@@ -442,6 +572,81 @@ def get_thermostat_data():
         return jsonify(data)
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/trend')
+def get_trend_data():
+    """
+    API endpoint that fetches trend log data for historical temperature chart
+    """
+    try:
+        # Fetch trend log data from TL27
+        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?alt=json"
+        
+        response = requests.get(trend_url, headers=auth_header, timeout=30)
+        if not response.ok:
+            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code}'}), 500
+        
+        trend_raw = response.json()
+        trend_data = []
+        
+        # Parse trend log entries
+        if 'value' in trend_raw and isinstance(trend_raw['value'], list):
+            for entry in trend_raw['value']:
+                try:
+                    # Handle different trend log formats
+                    if isinstance(entry, dict):
+                        # Extract timestamp and value
+                        timestamp = entry.get('timestamp') or entry.get('time')
+                        value = entry.get('value') or entry.get('present-value')
+                        
+                        if timestamp and value is not None:
+                            # Convert timestamp to ISO format if needed
+                            if isinstance(timestamp, str):
+                                # Handle various timestamp formats
+                                from datetime import datetime
+                                try:
+                                    if 'T' in timestamp:
+                                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                                    else:
+                                        dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                                except:
+                                    continue
+                            else:
+                                continue
+                            
+                            trend_data.append({
+                                'timestamp': dt.isoformat(),
+                                'value': float(value)
+                            })
+                except Exception as e:
+                    print(f"Error parsing trend entry: {e}")
+                    continue
+        
+        # Sort by timestamp (newest first, then reverse for chart)
+        trend_data.sort(key=lambda x: x['timestamp'])
+        
+        # Limit to last week (7 days) of data
+        from datetime import datetime, timedelta
+        week_ago = datetime.now() - timedelta(days=7)
+        week_ago_iso = week_ago.isoformat()
+        
+        filtered_data = [
+            point for point in trend_data 
+            if point['timestamp'] >= week_ago_iso
+        ]
+        
+        return jsonify({
+            'trend_data': filtered_data,
+            'total_points': len(filtered_data),
+            'date_range': {
+                'start': filtered_data[0]['timestamp'] if filtered_data else None,
+                'end': filtered_data[-1]['timestamp'] if filtered_data else None
+            }
+        })
+        
+    except Exception as e:
+        print(f"Trend data error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
