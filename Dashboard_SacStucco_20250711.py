@@ -665,6 +665,7 @@ def interpolate_gaps(rows, expected_interval_minutes=5):
 def get_trend_data():
     try:
         time_range = request.args.get('range', '1h')
+        debug_info = []  # Initialize debug_info at the start
         
         # Use UTC time with proper timezone formatting for EnteliWeb
         now = datetime.utcnow()
@@ -815,6 +816,7 @@ def get_trend_data():
         error_result['records'] = []
         error_result['total_records'] = 0
         error_result['actual_range'] = 'Error'
+        error_result['debug_info'] = [f"Error: {str(e)}"]  # Add debug_info for errors too
         return jsonify(error_result)
 
 @app.route('/api/debug')
