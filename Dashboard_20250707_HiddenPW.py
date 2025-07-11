@@ -4,6 +4,55 @@ Configurable Web Server for Thermostat Dashboard
 Easily adaptable for different controllers and EnteliCloud servers
 """
 
+# ============================================================================
+# CLIENT CONFIGURATION - MODIFY THESE SETTINGS FOR EACH DEPLOYMENT
+# ============================================================================
+
+# EnteliCloud Server Connection
+SERVER = "stasisenergygroup.entelicloud.com"  # Your EnteliCloud server URL
+SITE = "Rancho Family YMCA"                   # Site name in EnteliCloud
+DEVICE = "10500"                              # Device ID number
+
+# Authentication Credentials
+USER = "stasis_api"                           # API username
+PASSWORD = "your_password_here"               # API password (or use env var)
+
+# BACnet Object Mapping - Update these for your specific controller
+OBJECTS = {
+    # Temperature readings
+    'temperature': 'analog-input,201001',      # Current zone temperature sensor
+    
+    # Setpoint controls (configure based on your system type)
+    'zone_setpoint': 'analog-value,1',         # Single zone setpoint (if using single setpoint)
+    'heating_setpoint': 'analog-value,3',      # Heating setpoint (if using dual setpoint)
+    'cooling_setpoint': 'analog-value,2',      # Cooling setpoint (if using dual setpoint)
+    
+    # System status indicators
+    'system_mode': 'multi-state-value,2',      # System mode (heating/cooling/deadband)
+    'peak_savings': 'binary-value,2025',       # Peak demand savings mode
+    'fan_status': 'binary-output,1',           # Supply fan on/off status
+    
+    # Device information
+    'device_name': 'device,{DEVICE}/object-name',  # Controller device name
+}
+
+# Dashboard Display Settings
+DISPLAY_CONFIG = {
+    'use_dual_setpoints': True,                # True = dual setpoint, False = single setpoint
+    'site_display_name': SITE,                # How site appears on dashboard
+    'company_name': 'Stasis Energy Group',     # Your company name
+    'logo_url': 'https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png',
+    'dashboard_title': 'Thermal Energy Storage Dashboard',  # Subtitle text
+}
+
+# Server Settings
+PORT = 8000                                   # Web server port
+DEBUG_MODE = False                            # Set to True for development
+
+# ============================================================================
+# END CLIENT CONFIGURATION
+# ============================================================================
+
 from flask import Flask, request, jsonify, send_from_directory
 import requests
 import base64
@@ -12,46 +61,9 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ========== CONFIGURATION SECTION ==========
-# Update these settings for your specific controller
-
-# EnteliCloud Server Settings
-SERVER = "stasisenergygroup.entelicloud.com"  # Change this for different servers
-SITE = "Rancho Family YMCA"                   # Your site name
-DEVICE = "10500"                              # Your device number
-
-# Authentication
-USER = "stasis_api"
-PASSWORD = os.environ.get('PASSWORD', 'your_password_here')
-
-# BACnet Object Mapping - CUSTOMIZE THESE FOR YOUR CONTROLLER
-OBJECTS = {
-    # Temperature sensor
-    'temperature': 'analog-input,201001',      # AI201001 - Current zone temperature
-    
-    # Setpoints (choose single OR dual setpoint system)
-    'zone_setpoint': 'analog-value,1',         # AV1 - Single zone setpoint (if using single setpoint)
-    'heating_setpoint': 'analog-value,3',      # AV3 - Heating setpoint (if using dual setpoint)
-    'cooling_setpoint': 'analog-value,2',      # AV2 - Cooling setpoint (if using dual setpoint)
-    
-    # System status
-    'system_mode': 'multi-state-value,2',      # MV2 - Heating/Cooling/Deadband mode
-    'peak_savings': 'binary-value,2025',       # BV2025 - Peak demand savings mode
-    'fan_status': 'binary-output,1',           # BO1 - Supply fan status
-    
-    # Device info
-    'device_name': 'device,{DEVICE}/object-name',  # Device name from DEV object
-}
-
-# Display Settings
-DISPLAY_CONFIG = {
-    'use_dual_setpoints': True,    # True = show comfort range, False = show single setpoint
-    'site_display_name': SITE,    # How site name appears on dashboard
-    'company_name': 'Stasis Energy Group',
-    'logo_url': 'https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png'
-}
-
-# ========== END CONFIGURATION SECTION ==========
+# Use environment variable for password if available
+if 'PASSWORD' in os.environ:
+    PASSWORD = os.environ['PASSWORD']
 
 # Basic auth header
 auth_header = {
@@ -195,7 +207,7 @@ def index():
             <div class="header-text">
                 <h1>{DISPLAY_CONFIG['company_name']}</h1>
                 <h2 id="deviceTitle">{DISPLAY_CONFIG['site_display_name']} - Device {DEVICE}</h2>
-                <p class="powered-by">Thermal Energy Storage Dashboard</p>
+                <p class="powered-by">{DISPLAY_CONFIG['dashboard_title']}</p>
             </div>
         </div>
         
@@ -449,22 +461,22 @@ def get_thermostat_data():
         return jsonify(data)
         
     except Exception as e:
-        return jsonify({{'error': str(e)}}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
 def debug_values():
     """Debug endpoint to see all configured objects and their raw values"""
     try:
-        debug_data = {{
-            'configuration': {{
+        debug_data = {
+            'configuration': {
                 'server': SERVER,
                 'site': SITE,
                 'device': DEVICE,
                 'objects': OBJECTS,
                 'display_config': DISPLAY_CONFIG
-            }},
-            'raw_values': {{}}
-        }}
+            },
+            'raw_values': {}
+        }
         
         # Fetch all configured objects
         for obj_name, obj_id in OBJECTS.items():
@@ -484,16 +496,20 @@ def debug_values():
         return jsonify(debug_data)
         
     except Exception as e:
-        return jsonify({{'error': str(e)}}), 500
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"Starting Configurable Thermostat Dashboard...")
+    print("=" * 60)
+    print("CONFIGURABLE THERMOSTAT DASHBOARD")
+    print("=" * 60)
     print(f"Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
     print(f"Setpoint Mode: {'Dual' if DISPLAY_CONFIG['use_dual_setpoints'] else 'Single'}")
-    print(f"Dashboard URL: http://localhost:8000")
-    print(f"Debug URL: http://localhost:8000/api/debug")
+    print(f"Company: {DISPLAY_CONFIG['company_name']}")
+    print("-" * 60)
+    print(f"Dashboard URL: http://localhost:{PORT}")
+    print(f"Debug URL: http://localhost:{PORT}/api/debug")
+    print("=" * 60)
     
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=PORT, debug=DEBUG_MODE)
