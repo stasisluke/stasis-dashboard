@@ -538,10 +538,12 @@ def get_trend_data():
     NEW: API endpoint to fetch trend log data for charting
     Supports different time ranges: 1h, 4h, 12h, 24h, 7d
     """
-    print("=== STARTING TREND DATA REQUEST ===")
+    import sys
+    debug_info = []
+    
     try:
         time_range = request.args.get('range', '1h')
-        print(f"=== TIME RANGE: {time_range} ===")
+        debug_info.append(f"Time range: {time_range}")
         
         # Calculate time range
         now = datetime.now()
@@ -562,41 +564,51 @@ def get_trend_data():
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
         end_str = now.strftime('%Y-%m-%dT%H:%M:%S')
         
-        print(f"=== TIME WINDOW: {start_str} to {end_str} ===")
+        debug_info.append(f"Time window: {start_str} to {end_str}")
         
         # Fetch trend log data
         trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
         
-        print(f"=== TREND URL: {trend_url} ===")
+        debug_info.append(f"Trend URL: {trend_url}")
+        
+        # Force output
+        print(f"TREND DEBUG: {debug_info}")
+        sys.stdout.flush()
         
         response = requests.get(trend_url, headers=auth_header, timeout=30)
         
-        print(f"=== RESPONSE STATUS: {response.status_code} ===")
+        debug_info.append(f"Response status: {response.status_code}")
         
         if not response.ok:
             error_text = response.text[:200] if response.text else "No response text"
-            print(f"=== ERROR RESPONSE: {error_text} ===")
-            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code} - {error_text}'}), 500
+            debug_info.append(f"Error response: {error_text}")
+            return jsonify({
+                'error': f'Failed to fetch trend data: HTTP {response.status_code}',
+                'debug_info': debug_info
+            }), 500
         
         trend_data = response.json()
         total_keys = len(trend_data)
-        print(f"=== TOTAL KEYS IN RESPONSE: {total_keys} ===")
+        debug_info.append(f"Total keys in response: {total_keys}")
+        
+        # Show some sample keys
+        sample_keys = [k for k in list(trend_data.keys())[:5] if k != '$base']
+        debug_info.append(f"Sample keys: {sample_keys}")
         
         if total_keys <= 1:  # Only $base key or empty
-            print("=== NO DATA RECORDS FOUND ===")
+            debug_info.append("No data records found, trying without time filter")
             # Try without time filter to see if there's any data at all
-            no_filter_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=10&alt=json"
-            print(f"=== TRYING WITHOUT TIME FILTER: {no_filter_url} ===")
+            no_filter_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=5&alt=json"
             
             test_response = requests.get(no_filter_url, headers=auth_header, timeout=30)
-            print(f"=== NO-FILTER RESPONSE STATUS: {test_response.status_code} ===")
+            debug_info.append(f"No-filter response status: {test_response.status_code}")
             
             if test_response.ok:
                 test_data = test_response.json()
-                print(f"=== NO-FILTER TOTAL KEYS: {len(test_data)} ===")
+                debug_info.append(f"No-filter total keys: {len(test_data)}")
                 if len(test_data) > 1:
                     sample_key = next(k for k in test_data.keys() if k != '$base')
-                    print(f"=== SAMPLE RECORD: {test_data[sample_key]} ===")
+                    debug_info.append(f"Sample record structure: {test_data[sample_key]}")
         
         # Process the trend data
         records = []
@@ -608,8 +620,8 @@ def get_trend_data():
                 continue
                 
             processed_count += 1
-            if processed_count <= 3:  # Log first 3 records
-                print(f"=== PROCESSING RECORD {seq_num}: {record} ===")
+            if processed_count <= 2:  # Log first 2 records in debug
+                debug_info.append(f"Processing record {seq_num}: {record}")
                 
             try:
                 # Extract timestamp
@@ -620,8 +632,8 @@ def get_trend_data():
                 log_datum = record['logDatum']
                 temp_value = None
                 
-                if processed_count <= 3:
-                    print(f"=== LOG DATUM: {log_datum} ===")
+                if processed_count <= 2:
+                    debug_info.append(f"Log datum: {log_datum}")
                 
                 if 'real-value' in log_datum:
                     temp_value = float(log_datum['real-value']['value'])
@@ -630,7 +642,7 @@ def get_trend_data():
                 elif 'signed-value' in log_datum:
                     temp_value = float(log_datum['signed-value']['value'])
                 else:
-                    print(f"=== UNKNOWN LOG DATUM TYPE: {log_datum} ===")
+                    debug_info.append(f"Unknown log datum type: {log_datum}")
                 
                 if temp_value is not None:
                     # Format time for display
@@ -648,39 +660,42 @@ def get_trend_data():
                         'formatted_time': formatted_time
                     })
                     
-                    if processed_count <= 3:
-                        print(f"=== ADDED RECORD: temp={temp_value}, time={formatted_time} ===")
+                    if processed_count <= 2:
+                        debug_info.append(f"Added record: temp={temp_value}, time={formatted_time}")
                     
             except Exception as e:
-                print(f"=== ERROR PROCESSING RECORD {seq_num}: {e} ===")
+                debug_info.append(f"Error processing record {seq_num}: {str(e)}")
                 continue
         
         # Sort records by timestamp
         records.sort(key=lambda x: x['timestamp'])
         
-        print(f"=== FINAL RECORDS COUNT: {len(records)} ===")
+        debug_info.append(f"Final records count: {len(records)}")
         
         # For longer time ranges, we might want to downsample the data
         if time_range == '7d' and len(records) > 200:
             # Take every nth record to reduce data points
             step = len(records) // 200
             records = records[::step]
-            print(f"=== DOWNSAMPLED TO: {len(records)} ===")
+            debug_info.append(f"Downsampled to {len(records)} records")
         
-        print("=== RETURNING RESPONSE ===")
         return jsonify({
             'records': records,
             'time_range': time_range,
             'start_time': start_str,
             'end_time': end_str,
-            'total_records': len(records)
+            'total_records': len(records),
+            'debug_info': debug_info  # Include debug info in response
         })
         
     except Exception as e:
-        print(f"=== EXCEPTION IN TREND DATA: {e} ===")
+        debug_info.append(f"Exception: {str(e)}")
         import traceback
-        print(f"=== FULL TRACEBACK: {traceback.format_exc()} ===")
-        return jsonify({'error': str(e)}), 500
+        debug_info.append(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'error': str(e),
+            'debug_info': debug_info
+        }), 500
 
 @app.route('/api/debug')
 def debug_values():
