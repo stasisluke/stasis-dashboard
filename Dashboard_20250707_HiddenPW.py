@@ -353,13 +353,22 @@ def index():
                 document.getElementById('chartStatus').textContent = 'Loading trend data...';
                 document.getElementById('chartStatus').className = 'loading';
                 
-                // Update active button - find the clicked button
+                // Update active button - more precise matching
                 document.querySelectorAll('.time-range-btn').forEach(btn => {{
                     btn.classList.remove('active');
-                    if (btn.textContent.includes(timeRange === '1h' ? 'Hour' : 
-                        timeRange === '4h' ? '4 Hours' : 
-                        timeRange === '12h' ? '12 Hours' : 
-                        timeRange === '24h' ? '24 Hours' : '7 Days')) {{
+                }});
+                
+                // Find and activate the correct button based on timeRange
+                const buttonMap = {{
+                    '1h': 'Last Hour',
+                    '4h': 'Last 4 Hours', 
+                    '12h': 'Last 12 Hours',
+                    '24h': 'Last 24 Hours',
+                    '7d': 'Last 7 Days'
+                }};
+                
+                document.querySelectorAll('.time-range-btn').forEach(btn => {{
+                    if (btn.textContent === buttonMap[timeRange]) {{
                         btn.classList.add('active');
                     }}
                 }});
