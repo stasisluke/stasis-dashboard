@@ -573,64 +573,47 @@ def get_thermostat_data():
 
 @app.route('/api/trends')
 def get_trend_data():
-    """
-    FIXED: Get trend data with proper time filtering
-    """
     try:
         time_range = request.args.get('range', '1h')
         
-        # Get current time
         now = datetime.now()
-        
-        # Calculate the EXACT time range we want
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
-            max_results = 500  # Get more data than needed, then filter
+            max_results = 20
         elif time_range == '4h':
             start_time = now - timedelta(hours=4)
-            max_results = 500
+            max_results = 60
         elif time_range == '12h':
             start_time = now - timedelta(hours=12)
-            max_results = 1000
+            max_results = 150
         elif time_range == '24h':
             start_time = now - timedelta(hours=24)
-            max_results = 2000
+            max_results = 300
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
-            max_results = 5000
+            max_results = 2020
         else:
             start_time = now - timedelta(hours=1)
-            max_results = 500
+            max_results = 20
         
-        print(f"DEBUG: Requesting {time_range} trend data")
-        print(f"DEBUG: Now: {now}")
-        print(f"DEBUG: Start time: {start_time}")
-        print(f"DEBUG: Time difference: {now - start_time}")
-        
-        # Try to get trend data - sometimes the API time filters don't work well
-        # so we'll get a larger dataset and filter it ourselves
         url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
         
-        # Get trend data without time filter first, then filter ourselves
-        params = {
-            "alt": "json",
-            "max-results": max_results
-        }
+        params = dict()
+        params["published-ge"] = start_time.isoformat()
+        params["published-le"] = now.isoformat()
+        params["alt"] = "json"
+        params["max-results"] = max_results
         
-        print(f"DEBUG: Making API request with max-results: {max_results}")
+        print(f"DEBUG: Requesting {time_range} from {start_time.isoformat()} to {now.isoformat()}, max-results: {max_results}")
         
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
         data = r.json()
         
-        print(f"DEBUG: API returned {len(data)} items")
-        
-        # Process the data
-        all_rows = []
+        rows = []
         for v in data.values():
             if not isinstance(v, dict) or "timestamp" not in v:
                 continue
-                
             ld = v.get("logDatum", dict())
             val = None
             for k, w in ld.items():
@@ -642,100 +625,64 @@ def get_trend_data():
             
             timestamp_str = v["timestamp"]["value"]
             try:
-                # Parse the timestamp
                 timestamp_dt = datetime.fromisoformat(timestamp_str.replace('T', ' '))
                 
-                row = {
-                    'timestamp': timestamp_str,
-                    'temperature': float(val),
-                    'datetime': timestamp_dt
-                }
-                all_rows.append(row)
+                # Only apply additional time filtering for short ranges to be more strict
+                if time_range in ['1h', '4h']:
+                    # For short ranges, be more strict about time filtering
+                    if timestamp_dt < start_time:
+                        continue
                 
-            except Exception as e:
-                print(f"DEBUG: Error parsing timestamp {timestamp_str}: {e}")
+                if time_range in ['1h', '4h']:
+                    formatted_time = timestamp_dt.strftime('%H:%M')
+                elif time_range in ['12h', '24h']:
+                    formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
+                else:
+                    formatted_time = timestamp_dt.strftime('%m/%d')
+                
+                row = dict()
+                row['timestamp'] = timestamp_str
+                row['temperature'] = float(val)
+                row['formatted_time'] = formatted_time
+                row['sort_time'] = timestamp_dt
+                rows.append(row)
+            except:
                 continue
         
-        print(f"DEBUG: Parsed {len(all_rows)} valid records")
+        rows.sort(key=lambda x: x['sort_time'])
         
-        # Sort by timestamp
-        all_rows.sort(key=lambda x: x['datetime'])
+        for row in rows:
+            del row['sort_time']
         
-        # NOW filter by our desired time range
-        filtered_rows = []
-        for row in all_rows:
-            if row['datetime'] >= start_time:
-                filtered_rows.append(row)
+        # Only downsample 7d view if we have too many points for display
+        if time_range == '7d' and len(rows) > 300:
+            step = len(rows) // 300
+            rows = rows[::step]
         
-        print(f"DEBUG: After time filtering: {len(filtered_rows)} records")
-        print(f"DEBUG: Oldest record: {filtered_rows[0]['datetime'] if filtered_rows else 'None'}")
-        print(f"DEBUG: Newest record: {filtered_rows[-1]['datetime'] if filtered_rows else 'None'}")
-        
-        # Format the timestamps for display
-        final_rows = []
-        for row in filtered_rows:
-            timestamp_dt = row['datetime']
-            
-            if time_range in ['1h', '4h']:
-                formatted_time = timestamp_dt.strftime('%H:%M')
-            elif time_range in ['12h', '24h']:
-                formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
-            else:  # 7d
-                formatted_time = timestamp_dt.strftime('%m/%d')
-            
-            final_row = {
-                'timestamp': row['timestamp'],
-                'temperature': row['temperature'],
-                'formatted_time': formatted_time
-            }
-            final_rows.append(final_row)
-        
-        # For very long time ranges, downsample to keep chart readable
-        if time_range == '7d' and len(final_rows) > 300:
-            step = len(final_rows) // 300
-            final_rows = final_rows[::step]
-            print(f"DEBUG: Downsampled to {len(final_rows)} records for 7d view")
-        
-        # Calculate actual time range for display
-        if final_rows:
-            actual_start = filtered_rows[0]['datetime']
-            actual_end = filtered_rows[-1]['datetime']
-            actual_duration = actual_end - actual_start
-            
-            if actual_duration.days > 0:
-                actual_range_text = f"{actual_duration.days}d {actual_duration.seconds//3600}h"
-            elif actual_duration.seconds >= 3600:
-                actual_range_text = f"{actual_duration.seconds//3600}h {(actual_duration.seconds%3600)//60}m"
-            else:
-                actual_range_text = f"{actual_duration.seconds//60}m"
+        # Calculate what we actually got
+        if rows:
+            actual_range = f"{len(rows)} points"
         else:
-            actual_range_text = "No data"
+            actual_range = "No data"
         
-        print(f"DEBUG: Final result - {len(final_rows)} records for {time_range} (actual: {actual_range_text})")
+        print(f"DEBUG: Final result - {len(rows)} records for {time_range}")
         
-        result = {
-            'records': final_rows,
-            'time_range': time_range,
-            'actual_range': actual_range_text,
-            'start_time': start_time.isoformat(),
-            'end_time': now.isoformat(),
-            'total_records': len(final_rows),
-            'requested_start': start_time.isoformat(),
-            'actual_start': filtered_rows[0]['datetime'].isoformat() if filtered_rows else None,
-            'actual_end': filtered_rows[-1]['datetime'].isoformat() if filtered_rows else None
-        }
+        result = dict()
+        result['records'] = rows
+        result['time_range'] = time_range
+        result['actual_range'] = actual_range
+        result['start_time'] = start_time.isoformat()
+        result['end_time'] = now.isoformat()
+        result['total_records'] = len(rows)
         
         return jsonify(result)
         
     except Exception as e:
-        print(f"DEBUG: Error in get_trend_data: {e}")
-        error_result = {
-            'error': str(e),
-            'records': [],
-            'total_records': 0,
-            'time_range': time_range,
-            'actual_range': 'Error'
-        }
+        error_result = dict()
+        error_result['error'] = str(e)
+        error_result['records'] = []
+        error_result['total_records'] = 0
+        error_result['actual_range'] = 'Error'
         return jsonify(error_result)
 
 @app.route('/api/debug')
