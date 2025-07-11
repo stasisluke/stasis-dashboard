@@ -15,7 +15,7 @@ DEVICE = "10500"                              # Device ID number
 
 # Authentication Credentials
 USER = "stasis_api"                           # API username
-PASSWORD = "your_password_here"               # API password (or use env var)
+PASSWORD = "simpleapi"               # API password (or use env var)
 
 # BACnet Object Mapping - Update these for your specific controller
 OBJECTS = {
