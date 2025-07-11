@@ -683,7 +683,7 @@ def get_trend_data():
             max_results = 300
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
-            max_results = 10000  # Get all available data, then we'll process it
+            max_results = 50000  # Try an even larger number to get ALL available data
         else:
             start_time = now - timedelta(hours=1)
             max_results = 20
@@ -692,10 +692,18 @@ def get_trend_data():
         
         params = dict()
         # FIXED: Add timezone info (Z for UTC) to make EnteliWeb happy
-        params["published-ge"] = start_time.isoformat(timespec='seconds') + "Z"
-        params["published-le"] = now.isoformat(timespec='seconds') + "Z"
-        params["alt"] = "json"
-        params["max-results"] = max_results
+        # For 7d view, try getting ALL available data without time filters
+        if time_range == '7d':
+            # Don't use time filters for 7d - get everything available
+            params["alt"] = "json"
+            params["max-results"] = max_results
+            debug_info.append(f"7d: Requesting ALL available data (no time filters), max-results: {max_results}")
+        else:
+            params["published-ge"] = start_time.isoformat(timespec='seconds') + "Z"
+            params["published-le"] = now.isoformat(timespec='seconds') + "Z"
+            params["alt"] = "json"
+            params["max-results"] = max_results
+            debug_info.append(f"Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
         
         print(f"DEBUG: Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
         
@@ -781,9 +789,21 @@ def get_trend_data():
         
         rows.sort(key=lambda x: x['sort_time'])
         
-        # NEW: For 7d view, detect gaps and interpolate
+        # NEW: For 7d view, detect gaps and interpolate, and also filter to last 7 days
         if time_range == '7d' and len(rows) > 1:
-            rows = interpolate_gaps(rows, expected_interval_minutes=5, time_range=time_range)
+            # First, filter to only the last 7 days since we got ALL data
+            seven_days_ago = now - timedelta(days=7)
+            filtered_rows = [row for row in rows if row['sort_time'] >= seven_days_ago]
+            debug_info.append(f"After filtering to last 7 days: {len(filtered_rows)} records")
+            
+            # Then interpolate gaps
+            if len(filtered_rows) > 1:
+                rows = interpolate_gaps(filtered_rows, expected_interval_minutes=5, time_range=time_range)
+                debug_info.append(f"After interpolation: {len(rows)} records")
+            else:
+                rows = filtered_rows
+        elif time_range == '7d':
+            debug_info.append("7d view but insufficient data for interpolation")
         
         for row in rows:
             del row['sort_time']
