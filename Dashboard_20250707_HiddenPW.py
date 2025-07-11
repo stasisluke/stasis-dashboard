@@ -504,7 +504,7 @@ def get_thermostat_data():
     """
     try:
         data = {}
-        debug_log = []  # Collect debug info to return in response
+        debug_log = []
         
         # Helper function to fetch BACnet object value
         def fetch_object_value(object_id):
@@ -516,7 +516,6 @@ def get_thermostat_data():
                 if response.ok:
                     response_data = response.json()
                     debug_log.append(f"{object_id} data: {str(response_data)[:100]}")
-                    # Handle different response formats
                     if isinstance(response_data, dict) and 'value' in response_data:
                         debug_log.append(f"{object_id} value found: {response_data['value']}")
                         return response_data['value']
@@ -535,7 +534,7 @@ def get_thermostat_data():
             data['temperature'] = float(temp_value)
             debug_log.append(f"Temperature set to: {data['temperature']}")
         
-        # Fetch setpoints based on configuration  
+        # Fetch setpoints
         debug_log.append("=== FETCHING SETPOINTS ===")
         if DISPLAY_CONFIG['use_dual_setpoints']:
             heating_sp = fetch_object_value(OBJECTS['heating_setpoint'])
@@ -576,12 +575,11 @@ def get_thermostat_data():
             data['device_name'] = f'Device {DEVICE}'
         
         data['timestamp'] = datetime.now().isoformat()
-        data['debug_log'] = debug_log  # Include debug info in response
+        data['debug_log'] = debug_log
         return jsonify(data)
         
     except Exception as e:
-        debug_info = debug_log if 'debug_log' in locals() else []
-        return jsonify({'error': str(e), 'debug_log': debug_info})}
+        return jsonify({'error': str(e), 'debug_log': debug_log if 'debug_log' in locals() else []})}
 
 @app.route('/api/trend')
 def get_trend_data():
