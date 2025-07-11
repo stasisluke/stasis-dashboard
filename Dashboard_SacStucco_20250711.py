@@ -417,7 +417,7 @@ def index():
             }}
         }}
         
-        // NEW: Update chart with trend data
+        // NEW: Update chart with trend data, handling interpolated points
         function updateChart(trendData) {{
             if (!trendData.records || trendData.records.length === 0) {{
                 chart.data.labels = [];
@@ -427,15 +427,48 @@ def index():
             }}
             
             const labels = [];
-            const temperatures = [];
+            const actualTemperatures = [];
+            const interpolatedTemperatures = [];
             
             trendData.records.forEach(record => {{
                 labels.push(record.formatted_time);
-                temperatures.push(record.temperature);
+                if (record.interpolated) {{
+                    // For interpolated points, put them in a separate dataset
+                    actualTemperatures.push(null);
+                    interpolatedTemperatures.push(record.temperature);
+                }} else {{
+                    actualTemperatures.push(record.temperature);
+                    interpolatedTemperatures.push(null);
+                }}
             }});
             
             chart.data.labels = labels;
-            chart.data.datasets[0].data = temperatures;
+            chart.data.datasets[0].data = actualTemperatures;
+            
+            // Add interpolated data as a second dataset if we have any
+            const hasInterpolated = interpolatedTemperatures.some(val => val !== null);
+            if (hasInterpolated) {{
+                if (chart.data.datasets.length < 2) {{
+                    chart.data.datasets.push({{
+                        label: 'Interpolated Temperature (°F)',
+                        data: [],
+                        borderColor: '#FF9800',
+                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 1,
+                        pointHoverRadius: 3,
+                        borderDash: [5, 5]  // Dashed line for interpolated data
+                    }});
+                }}
+                chart.data.datasets[1].data = interpolatedTemperatures;
+            }} else {{
+                // Remove interpolated dataset if no interpolated data
+                if (chart.data.datasets.length > 1) {{
+                    chart.data.datasets.splice(1, 1);
+                }}
+            }}
+            
             chart.update();
         }}
         
@@ -571,6 +604,63 @@ def get_thermostat_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def interpolate_gaps(rows, expected_interval_minutes=5):
+    """
+    Fill gaps in temperature data with interpolated values
+    """
+    if len(rows) < 2:
+        return rows
+    
+    interpolated_rows = []
+    expected_interval = timedelta(minutes=expected_interval_minutes)
+    
+    for i in range(len(rows)):
+        current_row = rows[i]
+        interpolated_rows.append(current_row)
+        
+        # Check if there's a next row to compare with
+        if i < len(rows) - 1:
+            next_row = rows[i + 1]
+            current_time = current_row['sort_time']
+            next_time = next_row['sort_time']
+            time_gap = next_time - current_time
+            
+            # If gap is larger than 2x expected interval, fill it
+            if time_gap > expected_interval * 2:
+                # Calculate how many points we need to interpolate
+                num_intervals = int(time_gap.total_seconds() / (expected_interval_minutes * 60))
+                
+                # Limit interpolation to reasonable gaps (max 4 hours)
+                if num_intervals <= 48:  # 48 * 5min = 4 hours
+                    current_temp = current_row['temperature']
+                    next_temp = next_row['temperature']
+                    
+                    # Create interpolated points
+                    for j in range(1, num_intervals):
+                        interp_time = current_time + (expected_interval * j)
+                        # Linear interpolation
+                        ratio = j / num_intervals
+                        interp_temp = current_temp + (next_temp - current_temp) * ratio
+                        
+                        # Format time same way as original data
+                        if time_range in ['1h', '4h']:
+                            formatted_time = interp_time.strftime('%H:%M')
+                        elif time_range in ['12h', '24h']:
+                            formatted_time = interp_time.strftime('%m/%d %H:%M')
+                        else:
+                            formatted_time = interp_time.strftime('%m/%d')
+                        
+                        interp_row = {
+                            'timestamp': interp_time.isoformat(),
+                            'temperature': round(interp_temp, 2),
+                            'formatted_time': formatted_time,
+                            'sort_time': interp_time,
+                            'interpolated': True  # Mark as interpolated
+                        }
+                        interpolated_rows.append(interp_row)
+    
+    return interpolated_rows
+
 @app.route('/api/trends')
 def get_trend_data():
     try:
@@ -592,7 +682,7 @@ def get_trend_data():
             max_results = 300
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
-            max_results = 10000
+            max_results = 10000  # Get all available data, then we'll process it
         else:
             start_time = now - timedelta(hours=1)
             max_results = 20
@@ -611,6 +701,30 @@ def get_trend_data():
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
         data = r.json()
+        
+        print(f"DEBUG: API returned {len(data)} items for {time_range}")
+        
+        # If this is 7d and we didn't get much data, let's see what we actually got
+        if time_range == '7d':
+            print(f"DEBUG: 7d query - checking data range...")
+            first_timestamp = None
+            last_timestamp = None
+            for key, v in data.items():
+                if key not in ['$base', 'next'] and isinstance(v, dict) and "timestamp" in v:
+                    timestamp_str = v["timestamp"]["value"]
+                    clean_timestamp = timestamp_str.split('.')[0] if '.' in timestamp_str else timestamp_str
+                    timestamp_dt = datetime.fromisoformat(clean_timestamp)
+                    if first_timestamp is None or timestamp_dt < first_timestamp:
+                        first_timestamp = timestamp_dt
+                    if last_timestamp is None or timestamp_dt > last_timestamp:
+                        last_timestamp = timestamp_dt
+            
+            if first_timestamp and last_timestamp:
+                actual_span = last_timestamp - first_timestamp
+                print(f"DEBUG: 7d actual data spans {actual_span.days} days, {actual_span.seconds//3600} hours")
+                print(f"DEBUG: From {first_timestamp} to {last_timestamp}")
+            else:
+                print(f"DEBUG: No valid timestamps found in 7d data")
         
         rows = []
         for key, v in data.items():
@@ -666,6 +780,10 @@ def get_trend_data():
         
         rows.sort(key=lambda x: x['sort_time'])
         
+        # NEW: For 7d view, detect gaps and interpolate
+        if time_range == '7d' and len(rows) > 1:
+            rows = interpolate_gaps(rows, expected_interval_minutes=5)
+        
         for row in rows:
             del row['sort_time']
         
@@ -680,8 +798,6 @@ def get_trend_data():
         else:
             actual_range = "No data"
         
-        print(f"DEBUG: Final result - {len(rows)} records for {time_range}")
-        
         result = dict()
         result['records'] = rows
         result['time_range'] = time_range
@@ -689,6 +805,7 @@ def get_trend_data():
         result['start_time'] = start_time.isoformat() + "Z"
         result['end_time'] = now.isoformat() + "Z"
         result['total_records'] = len(rows)
+        result['debug_info'] = debug_info  # Add debug info to response
         
         return jsonify(result)
         
