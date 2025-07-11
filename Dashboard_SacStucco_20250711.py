@@ -579,16 +579,22 @@ def get_trend_data():
         now = datetime.now()
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
+            max_results = 20  # 1 hour at 5-min intervals = 12 points, plus buffer
         elif time_range == '4h':
             start_time = now - timedelta(hours=4)
+            max_results = 60  # 4 hours at 5-min intervals = 48 points, plus buffer
         elif time_range == '12h':
             start_time = now - timedelta(hours=12)
+            max_results = 150  # 12 hours at 5-min intervals = 144 points, plus buffer
         elif time_range == '24h':
             start_time = now - timedelta(hours=24)
+            max_results = 300  # 24 hours at 5-min intervals = 288 points, plus buffer
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
+            max_results = 2020  # 7 days at 5-min intervals = 2016 points, plus buffer
         else:
             start_time = now - timedelta(hours=1)
+            max_results = 20
         
         url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
         
@@ -596,7 +602,9 @@ def get_trend_data():
         params["published-ge"] = start_time.isoformat()
         params["published-le"] = now.isoformat()
         params["alt"] = "json"
-        params["max-results"] = 50000
+        params["max-results"] = max_results
+        
+        print(f"DEBUG: Requesting {time_range} from {start_time.isoformat()} to {now.isoformat()}, max-results: {max_results}")
         
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
@@ -619,6 +627,10 @@ def get_trend_data():
             try:
                 timestamp_dt = datetime.fromisoformat(timestamp_str.replace('T', ' '))
                 
+                # Double-check that the timestamp is actually within our requested range
+                if timestamp_dt < start_time:
+                    continue  # Skip records older than requested
+                
                 if time_range in ['1h', '4h']:
                     formatted_time = timestamp_dt.strftime('%H:%M')
                 elif time_range in ['12h', '24h']:
@@ -640,9 +652,12 @@ def get_trend_data():
         for row in rows:
             del row['sort_time']
         
-        if time_range == '7d' and len(rows) > 200:
-            step = len(rows) // 200
+        # Only downsample 7d view if we have too many points for display
+        if time_range == '7d' and len(rows) > 300:
+            step = len(rows) // 300
             rows = rows[::step]
+        
+        print(f"DEBUG: Final result - {len(rows)} records for {time_range}")
         
         result = dict()
         result['records'] = rows
