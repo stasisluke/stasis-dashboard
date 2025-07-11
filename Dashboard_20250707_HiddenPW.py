@@ -535,8 +535,7 @@ def get_thermostat_data():
 @app.route('/api/trends')
 def get_trend_data():
     """
-    NEW: API endpoint to fetch trend log data for charting
-    Supports different time ranges: 1h, 4h, 12h, 24h, 7d
+    API endpoint to fetch trend log data for charting - using working method from your code
     """
     import sys
     debug_info = []
@@ -560,111 +559,125 @@ def get_trend_data():
         else:
             start_time = now - timedelta(hours=1)
         
-        # Format times for API (yyyy-mm-ddThh:mm:ss)
+        # Format times for API (matching your working code format)
         start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
         end_str = now.strftime('%Y-%m-%dT%H:%M:%S')
         
         debug_info.append(f"Time window: {start_str} to {end_str}")
         
-        # Fetch trend log data
-        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
+        # Fetch trend log data using YOUR working method
+        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
+        
+        # Use params dict like your working code
+        params = {{
+            "published-ge": start_str,
+            "published-le": end_str,
+            "alt": "json",
+            "max-results": 1000000
+        }}
         
         debug_info.append(f"Trend URL: {trend_url}")
+        debug_info.append(f"Params: {params}")
         
         # Force output
         print(f"TREND DEBUG: {debug_info}")
         sys.stdout.flush()
         
-        response = requests.get(trend_url, headers=auth_header, timeout=30)
+        # Use params parameter like your working code
+        response = requests.get(trend_url, params=params, headers=auth_header, timeout=30)
         
         debug_info.append(f"Response status: {response.status_code}")
         
         if not response.ok:
             error_text = response.text[:200] if response.text else "No response text"
             debug_info.append(f"Error response: {error_text}")
-            return jsonify({
+            return jsonify({{
                 'error': f'Failed to fetch trend data: HTTP {response.status_code}',
                 'debug_info': debug_info
-            }), 500
+            }}), 500
         
         trend_data = response.json()
-        total_keys = len(trend_data)
-        debug_info.append(f"Total keys in response: {total_keys}")
+        
+        # Exclude metadata keys (like your working code)
+        records_data = {{k: v for k, v in trend_data.items() if k not in {{"$base", "nodeType", "next"}}}}
+        total_keys = len(records_data)
+        debug_info.append(f"Total data records: {total_keys}")
         
         # Show some sample keys
-        sample_keys = [k for k in list(trend_data.keys())[:5] if k != '$base']
+        sample_keys = list(records_data.keys())[:5]
         debug_info.append(f"Sample keys: {sample_keys}")
         
-        if total_keys <= 1:  # Only $base key or empty
+        if total_keys == 0:
             debug_info.append("No data records found, trying without time filter")
             # Try without time filter to see if there's any data at all
-            no_filter_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=5&alt=json"
+            test_params = {{"alt": "json", "max-results": 5}}
             
-            test_response = requests.get(no_filter_url, headers=auth_header, timeout=30)
+            test_response = requests.get(trend_url, params=test_params, headers=auth_header, timeout=30)
             debug_info.append(f"No-filter response status: {test_response.status_code}")
             
             if test_response.ok:
                 test_data = test_response.json()
-                debug_info.append(f"No-filter total keys: {len(test_data)}")
-                if len(test_data) > 1:
-                    sample_key = next(k for k in test_data.keys() if k != '$base')
-                    debug_info.append(f"Sample record structure: {test_data[sample_key]}")
+                test_records = {{k: v for k, v in test_data.items() if k not in {{"$base", "nodeType", "next"}}}}
+                debug_info.append(f"No-filter total records: {len(test_records)}")
+                if len(test_records) > 0:
+                    sample_key = next(iter(test_records.keys()))
+                    debug_info.append(f"Sample record structure: {test_records[sample_key]}")
         
-        # Process the trend data
+        # Process the trend data using YOUR working method
         records = []
         processed_count = 0
         
-        # The response is a dictionary where keys are sequence numbers
-        for seq_num, record in trend_data.items():
-            if seq_num == '$base':  # Skip the base property
+        for seq, record in records_data.items():
+            if not isinstance(record, dict):
                 continue
                 
             processed_count += 1
             if processed_count <= 2:  # Log first 2 records in debug
-                debug_info.append(f"Processing record {seq_num}: {record}")
+                debug_info.append(f"Processing record {seq}: {record}")
                 
             try:
-                # Extract timestamp
-                timestamp_str = record['timestamp']['value']
-                timestamp = datetime.fromisoformat(timestamp_str.replace('T', ' '))
-                
-                # Extract temperature value
-                log_datum = record['logDatum']
+                # Extract timestamp (your method)
+                timestamp = record.get("timestamp", {{}}).get("value")
+                if not timestamp:
+                    continue
+                    
+                # Extract the value from logDatum (YOUR working method)
+                log_datum = record.get("logDatum", {{}})
                 temp_value = None
                 
                 if processed_count <= 2:
                     debug_info.append(f"Log datum: {log_datum}")
                 
-                if 'real-value' in log_datum:
-                    temp_value = float(log_datum['real-value']['value'])
-                elif 'unsigned-value' in log_datum:
-                    temp_value = float(log_datum['unsigned-value']['value'])
-                elif 'signed-value' in log_datum:
-                    temp_value = float(log_datum['signed-value']['value'])
-                else:
-                    debug_info.append(f"Unknown log datum type: {log_datum}")
+                if isinstance(log_datum, dict):
+                    for k, v in log_datum.items():
+                        if k != "$base":
+                            temp_value = v.get("value") if isinstance(v, dict) else v
+                            break
                 
-                if temp_value is not None:
+                if timestamp and temp_value is not None:
+                    # Parse timestamp
+                    timestamp_dt = datetime.fromisoformat(timestamp.replace('T', ' '))
+                    
                     # Format time for display
                     if time_range in ['1h', '4h']:
-                        formatted_time = timestamp.strftime('%H:%M')
+                        formatted_time = timestamp_dt.strftime('%H:%M')
                     elif time_range in ['12h', '24h']:
-                        formatted_time = timestamp.strftime('%m/%d %H:%M')
+                        formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
                     else:  # 7d
-                        formatted_time = timestamp.strftime('%m/%d')
+                        formatted_time = timestamp_dt.strftime('%m/%d')
                     
-                    records.append({
-                        'sequence': seq_num,
-                        'timestamp': timestamp_str,
-                        'temperature': temp_value,
+                    records.append({{
+                        'sequence': seq,
+                        'timestamp': timestamp,
+                        'temperature': float(temp_value),
                         'formatted_time': formatted_time
-                    })
+                    }})
                     
                     if processed_count <= 2:
                         debug_info.append(f"Added record: temp={temp_value}, time={formatted_time}")
                     
             except Exception as e:
-                debug_info.append(f"Error processing record {seq_num}: {str(e)}")
+                debug_info.append(f"Error processing record {seq}: {str(e)}")
                 continue
         
         # Sort records by timestamp
@@ -679,23 +692,23 @@ def get_trend_data():
             records = records[::step]
             debug_info.append(f"Downsampled to {len(records)} records")
         
-        return jsonify({
+        return jsonify({{
             'records': records,
             'time_range': time_range,
             'start_time': start_str,
             'end_time': end_str,
             'total_records': len(records),
-            'debug_info': debug_info  # Include debug info in response
-        })
+            'debug_info': debug_info
+        }})
         
     except Exception as e:
         debug_info.append(f"Exception: {str(e)}")
         import traceback
         debug_info.append(f"Traceback: {traceback.format_exc()}")
-        return jsonify({
+        return jsonify({{
             'error': str(e),
             'debug_info': debug_info
-        }), 500
+        }}), 500
 
 @app.route('/api/debug')
 def debug_values():
@@ -726,6 +739,26 @@ def debug_values():
         response = requests.get(trend_info_url, headers=auth_header, timeout=10)
         if response.ok:
             debug_data['trend_log_name'] = response.json()
+        else:
+            debug_data['trend_log_name_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
+        
+        # NEW: Test trend log with no time filter (get last 5 records)
+        trend_test_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=5&alt=json"
+        response = requests.get(trend_test_url, headers=auth_header, timeout=10)
+        if response.ok:
+            trend_test_data = response.json()
+            debug_data['trend_log_test'] = {
+                'total_keys': len(trend_test_data),
+                'sample_keys': list(trend_test_data.keys())[:10],
+                'sample_record': None
+            }
+            # Get one sample record
+            for key, value in trend_test_data.items():
+                if key != '$base':
+                    debug_data['trend_log_test']['sample_record'] = value
+                    break
+        else:
+            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
         
         return jsonify(debug_data)
         
