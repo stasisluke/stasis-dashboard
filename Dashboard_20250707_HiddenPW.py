@@ -9,9 +9,9 @@ Easily adaptable for different controllers and EnteliCloud servers
 # ============================================================================
 
 # EnteliCloud Server Connection
-SERVER = "stasisenergygroup.entelicloud.com"  # Your EnteliCloud server URL
-SITE = "Rancho Family YMCA"                   # Site name in EnteliCloud
-DEVICE = "10500"                              # Device ID number
+SERVER = "stasisenergy.entelicloud.com"  # Your EnteliCloud server URL
+SITE = "UnivRedlands"                   # Site name in EnteliCloud
+DEVICE = "4145549"                              # Device ID number
 
 # Authentication Credentials
 USER = "stasis_api"                           # API username
@@ -28,9 +28,9 @@ OBJECTS = {
     'cooling_setpoint': 'analog-value,2',      # Cooling setpoint (if using dual setpoint)
     
     # System status indicators
-    'system_mode': 'multi-state-value,2',      # System mode (heating/cooling/deadband)
-    'peak_savings': 'binary-value,2025',       # Peak demand savings mode
-    'fan_status': 'binary-output,1',           # Supply fan on/off status
+    'system_mode': 'multi-state-value,1',      # System mode (heating/cooling/deadband)
+    'peak_savings': 'binary-value,16',       # Peak demand savings mode
+    'fan_status': 'binary-output,1105',           # Supply fan on/off status
     
     # Device information
     'device_name': 'device,{DEVICE}/object-name',  # Controller device name
