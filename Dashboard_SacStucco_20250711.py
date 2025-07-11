@@ -14,7 +14,11 @@ import json
 
 app = Flask(__name__)
 
-# Configuration - update these with your settings
+# ========================================
+# CONFIGURATION SECTION - EDIT HERE FOR DIFFERENT CLIENTS/CONTROLLERS
+# ========================================
+
+# Server Configuration
 SERVER = "stasisenergy.entelicloud.com"
 SITE = "StuccoCo"
 DEVICE = "4145595"
@@ -25,8 +29,17 @@ PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your 
 DISPLAY_SITE_NAME = "Sacramento Stucco"  # Custom site name for display
 DISPLAY_DEVICE_NAME = "Zone Controller"  # Custom device name for display (leave empty to use actual device name)
 
-# Trend Log Configuration - you may need to adjust this instance number
-TEMP_TREND_LOG_INSTANCE = 27  # Adjust this to match your temperature trend log instance
+# BACnet Object Configuration - adjust these for different controllers
+TEMPERATURE_AI = 301001          # Analog Input for zone temperature
+SETPOINT_AV = 1                  # Analog Value for active zone setpoint
+SYSTEM_MODE_MV = 2               # Multi-state Value for system mode (heating/cooling/deadband)
+PEAK_SAVINGS_BV = 2025           # Binary Value for peak savings mode status
+FAN_STATUS_BO = 1                # Binary Output for fan status
+TEMP_TREND_LOG_INSTANCE = 27     # Trend Log instance for temperature history
+
+# ========================================
+# END CONFIGURATION SECTION
+# ========================================
 
 # Basic auth header (exactly like your Python code)
 auth_header = {
@@ -462,22 +475,22 @@ def get_thermostat_data():
     try:
         data = {}
         
-        # Fetch temperature (AI301001 - IP_ZONE_Temperature)
-        temp_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-input,301001/present-value?alt=json"
+        # Fetch temperature
+        temp_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-input,{TEMPERATURE_AI}/present-value?alt=json"
         response = requests.get(temp_url, headers=auth_header, timeout=10)
         if response.ok:
             temp_data = response.json()
             data['temperature'] = float(temp_data.get('value', 0))
         
-        # Fetch zone setpoint (AV1 - CTRL_ActiveZoneSetpoint)
-        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,1/present-value?alt=json"
+        # Fetch zone setpoint
+        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
         response = requests.get(setpoint_url, headers=auth_header, timeout=10)
         if response.ok:
             setpoint_data = response.json()
             data['setpoint'] = float(setpoint_data.get('value', 0))
         
-        # Fetch system mode (MV2 - multi-state-value,2)
-        mode_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/present-value?alt=json"
+        # Fetch system mode
+        mode_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/present-value?alt=json"
         response = requests.get(mode_url, headers=auth_header, timeout=10)
         if response.ok:
             mode_data = response.json()
@@ -512,16 +525,16 @@ def get_thermostat_data():
             print(f"DEBUG: Failed to get MV2 data")
             data['system_mode'] = 'Error'
         
-        # Fetch peak savings mode status (BV2025)
-        peak_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-value,2025/present-value?alt=json"
+        # Fetch peak savings mode status
+        peak_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-value,{PEAK_SAVINGS_BV}/present-value?alt=json"
         response = requests.get(peak_url, headers=auth_header, timeout=10)
         if response.ok:
             peak_data = response.json()
             peak_value = peak_data.get('value')
             data['peak_savings'] = peak_value == 'active' or peak_value == 'Active' or peak_value == 'On' or peak_value == True or peak_value == 1
         
-        # Fetch fan status (BO1)
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,1/present-value?alt=json"
+        # Fetch fan status
+        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
         response = requests.get(fan_url, headers=auth_header, timeout=10)
         if response.ok:
             fan_data = response.json()
@@ -653,23 +666,23 @@ def debug_values():
     try:
         debug_data = {}
         
-        # Debug MV2 - get both present-value and state-text
-        mv2_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/present-value?alt=json"
-        response = requests.get(mv2_url, headers=auth_header, timeout=10)
+        # Debug system mode
+        mv_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/present-value?alt=json"
+        response = requests.get(mv_url, headers=auth_header, timeout=10)
         if response.ok:
-            debug_data['mv2_present_value'] = response.json()
+            debug_data['system_mode_present_value'] = response.json()
         
-        # Try to get state text for MV2
-        mv2_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/state-text?alt=json"
-        response = requests.get(mv2_text_url, headers=auth_header, timeout=10)
+        # Try to get state text for system mode
+        mv_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/state-text?alt=json"
+        response = requests.get(mv_text_url, headers=auth_header, timeout=10)
         if response.ok:
-            debug_data['mv2_state_text'] = response.json()
+            debug_data['system_mode_state_text'] = response.json()
         
-        # Debug BO1 - fan status
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,1/present-value?alt=json"
+        # Debug fan status
+        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
         response = requests.get(fan_url, headers=auth_header, timeout=10)
         if response.ok:
-            debug_data['bo1_present_value'] = response.json()
+            debug_data['fan_status_present_value'] = response.json()
         
         # NEW: Debug trend log info
         trend_info_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/object-name?alt=json"
