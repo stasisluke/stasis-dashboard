@@ -819,6 +819,8 @@ def get_trend_data():
         else:
             actual_range = "No data"
         
+        debug_info.append(f"Final result - {len(rows)} records for {time_range}")
+        
         result = dict()
         result['records'] = rows
         result['time_range'] = time_range
