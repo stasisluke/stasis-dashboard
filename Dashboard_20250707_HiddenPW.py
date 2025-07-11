@@ -501,7 +501,14 @@ def get_thermostat_data():
             try:
                 response = requests.get(url, headers=auth_header, timeout=10)
                 if response.ok:
-                    return response.json().get('value')
+                    response_data = response.json()
+                    # Handle different response formats
+                    if isinstance(response_data, dict):
+                        if 'value' in response_data:
+                            return response_data['value']
+                        elif '$base' in response_data and 'value' in response_data:
+                            return response_data['value']
+                    return response_data
                 else:
                     print(f"Failed to fetch {object_id}: HTTP {response.status_code}")
                     return None
@@ -511,6 +518,7 @@ def get_thermostat_data():
         
         # Fetch temperature
         temp_value = fetch_object_value(OBJECTS['temperature'])
+        print(f"Temperature fetch result: {temp_value} (type: {type(temp_value)})")
         if temp_value is not None:
             data['temperature'] = float(temp_value)
         
@@ -806,6 +814,8 @@ if __name__ == '__main__':
     print(f"Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
+    print(f"Username: {USER}")
+    print(f"Password: {'SET' if PASSWORD != 'your_password_here' else 'NOT SET - USING DEFAULT'}")
     print(f"Setpoint Mode: {'Dual' if DISPLAY_CONFIG['use_dual_setpoints'] else 'Single'}")
     print(f"Company: {DISPLAY_CONFIG['company_name']}")
     print("-" * 60)
