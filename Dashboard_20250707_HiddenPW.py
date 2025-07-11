@@ -580,73 +580,126 @@ def get_trend_data():
     API endpoint that fetches trend log data for historical temperature chart
     """
     try:
-        # Fetch trend log data from TL27
-        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?alt=json"
+        # Get last week's data using published date range
+        from datetime import datetime, timedelta
         
+        # Get data from last 7 days
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=7)
+        
+        # Format dates for API (yyyy-mm-ddThh:mm:ss)
+        start_str = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+        end_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+        
+        # Fetch trend log data from TL27 with date range
+        trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['trend_log']}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
+        
+        print(f"Fetching trend data from: {trend_url}")
         response = requests.get(trend_url, headers=auth_header, timeout=30)
+        
         if not response.ok:
+            print(f"HTTP Error: {response.status_code}")
+            print(f"Response: {response.text}")
             return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code}'}), 500
         
         trend_raw = response.json()
+        print(f"Raw trend response type: {type(trend_raw)}")
+        
         trend_data = []
         
-        # Parse trend log entries
-        if 'value' in trend_raw and isinstance(trend_raw['value'], list):
-            for entry in trend_raw['value']:
+        # Parse trend log entries according to EnteliCloud format
+        # Data comes as: {"sequence_number": {"timestamp": {"value": "..."}, "logDatum": {"real-value": {"value": "..."}}, ...}, ...}
+        
+        if isinstance(trend_raw, dict):
+            sequence_numbers = [key for key in trend_raw.keys() if key != "$base"]
+            print(f"Found {len(sequence_numbers)} sequence entries")
+            
+            for seq_num in sequence_numbers:
                 try:
-                    # Handle different trend log formats
-                    if isinstance(entry, dict):
-                        # Extract timestamp and value
-                        timestamp = entry.get('timestamp') or entry.get('time')
-                        value = entry.get('value') or entry.get('present-value')
-                        
-                        if timestamp and value is not None:
-                            # Convert timestamp to ISO format if needed
-                            if isinstance(timestamp, str):
-                                # Handle various timestamp formats
-                                from datetime import datetime
-                                try:
-                                    if 'T' in timestamp:
-                                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                                    else:
-                                        dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-                                except:
-                                    continue
-                            else:
-                                continue
+                    entry = trend_raw[seq_num]
+                    
+                    if not isinstance(entry, dict):
+                        continue
+                    
+                    # Extract timestamp
+                    timestamp_obj = entry.get('timestamp', {})
+                    if isinstance(timestamp_obj, dict) and 'value' in timestamp_obj:
+                        timestamp_str = timestamp_obj['value']
+                    else:
+                        continue
+                    
+                    # Extract value from logDatum
+                    log_datum = entry.get('logDatum', {})
+                    value = None
+                    
+                    if isinstance(log_datum, dict):
+                        # Try different value types
+                        if 'real-value' in log_datum:
+                            real_obj = log_datum['real-value']
+                            if isinstance(real_obj, dict) and 'value' in real_obj:
+                                value = float(real_obj['value'])
+                        elif 'unsigned-value' in log_datum:
+                            uint_obj = log_datum['unsigned-value']
+                            if isinstance(uint_obj, dict) and 'value' in uint_obj:
+                                value = float(uint_obj['value'])
+                        elif 'signed-value' in log_datum:
+                            int_obj = log_datum['signed-value']
+                            if isinstance(int_obj, dict) and 'value' in int_obj:
+                                value = float(int_obj['value'])
+                    
+                    if value is not None and timestamp_str:
+                        # Parse timestamp (format: 2014-06-04T12:00:57.67)
+                        try:
+                            # Remove sub-seconds if present and parse
+                            if '.' in timestamp_str:
+                                timestamp_str = timestamp_str.split('.')[0]
+                            dt = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
                             
                             trend_data.append({
                                 'timestamp': dt.isoformat(),
-                                'value': float(value)
+                                'value': value,
+                                'sequence': seq_num
                             })
+                            
+                        except ValueError as e:
+                            print(f"Error parsing timestamp '{timestamp_str}': {e}")
+                            continue
+                    
                 except Exception as e:
-                    print(f"Error parsing trend entry: {e}")
+                    print(f"Error processing sequence {seq_num}: {e}")
                     continue
         
-        # Sort by timestamp (newest first, then reverse for chart)
+        print(f"Successfully parsed {len(trend_data)} data points")
+        
+        if not trend_data:
+            return jsonify({
+                'error': 'No valid data points found in trend log',
+                'debug_info': {
+                    'url_used': trend_url,
+                    'raw_response_sample': str(trend_raw)[:1000] if trend_raw else 'empty'
+                }
+            }), 500
+        
+        # Sort by timestamp
         trend_data.sort(key=lambda x: x['timestamp'])
         
-        # Limit to last week (7 days) of data
-        from datetime import datetime, timedelta
-        week_ago = datetime.now() - timedelta(days=7)
-        week_ago_iso = week_ago.isoformat()
-        
-        filtered_data = [
-            point for point in trend_data 
-            if point['timestamp'] >= week_ago_iso
-        ]
+        print(f"Returning {len(trend_data)} trend data points")
+        if trend_data:
+            print(f"Date range: {trend_data[0]['timestamp']} to {trend_data[-1]['timestamp']}")
         
         return jsonify({
-            'trend_data': filtered_data,
-            'total_points': len(filtered_data),
+            'trend_data': trend_data,
+            'total_points': len(trend_data),
             'date_range': {
-                'start': filtered_data[0]['timestamp'] if filtered_data else None,
-                'end': filtered_data[-1]['timestamp'] if filtered_data else None
+                'start': trend_data[0]['timestamp'] if trend_data else None,
+                'end': trend_data[-1]['timestamp'] if trend_data else None
             }
         })
         
     except Exception as e:
         print(f"Trend data error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
@@ -661,7 +714,8 @@ def debug_values():
                 'objects': OBJECTS,
                 'display_config': DISPLAY_CONFIG
             },
-            'raw_values': {}
+            'raw_values': {},
+            'trend_log_check': {}
         }
         
         # Fetch all configured objects
@@ -678,6 +732,30 @@ def debug_values():
                     debug_data['raw_values'][obj_name] = f"HTTP {response.status_code}"
             except Exception as e:
                 debug_data['raw_values'][obj_name] = f"Error: {str(e)}"
+        
+        # Check for trend logs - try different numbers
+        for tl_num in [27, 1, 2, 3, 4, 5, 10, 20, 25, 26, 28, 29, 30]:
+            tl_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{tl_num}?alt=json"
+            try:
+                response = requests.get(tl_url, headers=auth_header, timeout=10)
+                if response.ok:
+                    debug_data['trend_log_check'][f'TL{tl_num}'] = 'EXISTS'
+                else:
+                    debug_data['trend_log_check'][f'TL{tl_num}'] = f"HTTP {response.status_code}"
+            except Exception as e:
+                debug_data['trend_log_check'][f'TL{tl_num}'] = f"Error: {str(e)}"
+        
+        # Also try to list all objects on the device
+        device_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}?alt=json"
+        try:
+            response = requests.get(device_url, headers=auth_header, timeout=10)
+            if response.ok:
+                device_data = response.json()
+                debug_data['device_objects'] = device_data
+            else:
+                debug_data['device_objects'] = f"HTTP {response.status_code}"
+        except Exception as e:
+            debug_data['device_objects'] = f"Error: {str(e)}"
         
         return jsonify(debug_data)
         
