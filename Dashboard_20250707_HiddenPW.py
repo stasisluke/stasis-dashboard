@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Integrated Web Server for Thermostat Dashboard
-Serves the HTML file and provides API endpoints that work just like your existing Python code
+Configurable Web Server for Thermostat Dashboard
+Easily adaptable for different controllers and EnteliCloud servers
 """
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -12,14 +12,48 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Configuration - update these with your settings
-SERVER = "stasisenergygroup.entelicloud.com"
-SITE = "Rancho Family YMCA"
-DEVICE = "10500"
-USER = "stasis_api"
-PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
+# ========== CONFIGURATION SECTION ==========
+# Update these settings for your specific controller
 
-# Basic auth header (exactly like your Python code)
+# EnteliCloud Server Settings
+SERVER = "stasisenergygroup.entelicloud.com"  # Change this for different servers
+SITE = "Rancho Family YMCA"                   # Your site name
+DEVICE = "10500"                              # Your device number
+
+# Authentication
+USER = "stasis_api"
+PASSWORD = os.environ.get('PASSWORD', 'your_password_here')
+
+# BACnet Object Mapping - CUSTOMIZE THESE FOR YOUR CONTROLLER
+OBJECTS = {
+    # Temperature sensor
+    'temperature': 'analog-input,201001',      # AI201001 - Current zone temperature
+    
+    # Setpoints (choose single OR dual setpoint system)
+    'zone_setpoint': 'analog-value,1',         # AV1 - Single zone setpoint (if using single setpoint)
+    'heating_setpoint': 'analog-value,3',      # AV3 - Heating setpoint (if using dual setpoint)
+    'cooling_setpoint': 'analog-value,2',      # AV2 - Cooling setpoint (if using dual setpoint)
+    
+    # System status
+    'system_mode': 'multi-state-value,2',      # MV2 - Heating/Cooling/Deadband mode
+    'peak_savings': 'binary-value,2025',       # BV2025 - Peak demand savings mode
+    'fan_status': 'binary-output,1',           # BO1 - Supply fan status
+    
+    # Device info
+    'device_name': 'device,{DEVICE}/object-name',  # Device name from DEV object
+}
+
+# Display Settings
+DISPLAY_CONFIG = {
+    'use_dual_setpoints': True,    # True = show comfort range, False = show single setpoint
+    'site_display_name': SITE,    # How site name appears on dashboard
+    'company_name': 'Stasis Energy Group',
+    'logo_url': 'https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png'
+}
+
+# ========== END CONFIGURATION SECTION ==========
+
+# Basic auth header
 auth_header = {
     "Authorization": f"Basic {base64.b64encode(f'{USER}:{PASSWORD}'.encode()).decode()}",
     "Accept": "application/json"
@@ -33,7 +67,7 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stasis Energy Group - {SITE} Device {DEVICE}</title>
+    <title>{DISPLAY_CONFIG['company_name']} - {DISPLAY_CONFIG['site_display_name']} Device {DEVICE}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -124,6 +158,7 @@ def index():
             font-size: 1em;
             color: #666;
             margin-top: 10px;
+            text-align: center;
         }}
         .mode-text {{
             font-size: 1.1em;
@@ -135,27 +170,39 @@ def index():
         .mode-text.heating {{ color: #FF9800; }}
         .mode-text.peak-savings {{ color: #4CAF50; }}
         .mode-text.deadband {{ color: #9E9E9E; }}
-        .status-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }}
-        .status-item {{ text-align: center; padding: 15px; background: rgba(0, 0, 0, 0.05); border-radius: 10px; }}
-        .status-value {{ font-size: 1.5em; font-weight: bold; color: #2196F3; }}
-        .status-label {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
         .chart-container {{ position: relative; height: 300px; margin-top: 20px; }}
         .last-updated {{ font-size: 0.9em; color: #666; text-align: center; margin-top: 10px; }}
         .btn {{ padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; background: #2196F3; color: white; margin: 5px; }}
         .btn:hover {{ background: #1976D2; }}
+        
+        .config-info {{
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #555;
+        }}
+        .config-info h4 {{ margin-bottom: 10px; color: #333; }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="stasis-logo">
-                <img src="https://raw.githubusercontent.com/stasisluke/stasis-dashboard/main/stasis-logo.png" alt="Stasis Energy Group" onerror="this.style.display='none'">
+                <img src="{DISPLAY_CONFIG['logo_url']}" alt="{DISPLAY_CONFIG['company_name']}" onerror="this.style.display='none'">
             </div>
             <div class="header-text">
-                <h1>Stasis Energy Group</h1>
-                <h2 id="deviceTitle">{SITE} - Device {DEVICE}</h2>
+                <h1>{DISPLAY_CONFIG['company_name']}</h1>
+                <h2 id="deviceTitle">{DISPLAY_CONFIG['site_display_name']} - Device {DEVICE}</h2>
                 <p class="powered-by">Thermal Energy Storage Dashboard</p>
             </div>
+        </div>
+        
+        <div class="config-info">
+            <h4>Controller Configuration:</h4>
+            <strong>Server:</strong> {SERVER} | <strong>Site:</strong> {SITE} | <strong>Device:</strong> {DEVICE} | 
+            <strong>Mode:</strong> {"Dual Setpoint" if DISPLAY_CONFIG['use_dual_setpoints'] else "Single Setpoint"}
         </div>
         
         <div class="card">
@@ -163,7 +210,7 @@ def index():
             <div class="temperature-circle" id="tempCircle">
                 <div class="temperature-value" id="currentTemp">--</div>
                 <div class="temperature-unit">°F</div>
-                <div class="setpoint-text" id="setpointText">Setpoint: --°F</div>
+                <div class="setpoint-text" id="setpointText">{"Comfort Range: --°F - --°F" if DISPLAY_CONFIG['use_dual_setpoints'] else "Setpoint: --°F"}</div>
                 <div class="mode-text" id="modeText">--</div>
             </div>
             <div class="last-updated" id="lastUpdated">Never updated</div>
@@ -179,6 +226,7 @@ def index():
         <div class="card">
             <button class="btn" onclick="fetchData()">Refresh Data</button>
             <button class="btn" onclick="toggleAutoRefresh()">Toggle Auto-Refresh</button>
+            <button class="btn" onclick="window.open('/api/debug', '_blank')">Debug Info</button>
         </div>
     </div>
 
@@ -186,6 +234,7 @@ def index():
         let chart;
         let autoRefresh = false;
         let refreshInterval;
+        const useDualSetpoints = {str(DISPLAY_CONFIG['use_dual_setpoints']).lower()};
         
         // Initialize chart
         function initChart() {{
@@ -233,10 +282,17 @@ def index():
         function updateDisplay(data) {{
             // Update temperature circle
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
-            const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
-            
             document.getElementById('currentTemp').textContent = tempValue;
-            document.getElementById('setpointText').textContent = `Setpoint: ${{setpointValue}}°F`;
+            
+            // Update setpoint display based on configuration
+            if (useDualSetpoints) {{
+                const heatingSetpoint = data.heating_setpoint ? data.heating_setpoint.toFixed(0) : '--';
+                const coolingSetpoint = data.cooling_setpoint ? data.cooling_setpoint.toFixed(0) : '--';
+                document.getElementById('setpointText').textContent = `Comfort Range: ${{heatingSetpoint}}°F - ${{coolingSetpoint}}°F`;
+            }} else {{
+                const setpointValue = data.zone_setpoint ? data.zone_setpoint.toFixed(1) : '--';
+                document.getElementById('setpointText').textContent = `Setpoint: ${{setpointValue}}°F`;
+            }}
             
             // Determine mode and circle styling
             const circle = document.getElementById('tempCircle');
@@ -249,26 +305,24 @@ def index():
             if (data.peak_savings) {{
                 circle.classList.add('peak-savings');
                 modeText.classList.add('peak-savings');
-                modeText.textContent = 'Peak Savings Mode';
+                modeText.textContent = 'PEAK SAVINGS MODE';
             }} else if (data.system_mode === 'Cooling') {{
                 circle.classList.add('cooling');
                 modeText.classList.add('cooling');
-                modeText.textContent = 'Cooling';
+                modeText.textContent = 'COOLING';
             }} else if (data.system_mode === 'Heating') {{
                 circle.classList.add('heating');
                 modeText.classList.add('heating');
-                modeText.textContent = 'Heating';
+                modeText.textContent = 'HEATING';
             }} else {{
                 circle.classList.add('deadband');
                 modeText.classList.add('deadband');
-                modeText.textContent = 'Standby';
+                modeText.textContent = 'MAINTAINING';
             }}
             
-            // Update device title - show "Site : Device Name" format
+            // Update device title
             if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
-                document.getElementById('deviceTitle').textContent = `{SITE} : ${{data.device_name}}`;
-            }} else {{
-                document.getElementById('deviceTitle').textContent = `{SITE} : Device {DEVICE}`;
+                document.getElementById('deviceTitle').textContent = `{DISPLAY_CONFIG['site_display_name']} : ${{data.device_name}}`;
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
@@ -313,132 +367,133 @@ def index():
 @app.route('/api/thermostat')
 def get_thermostat_data():
     """
-    API endpoint that mimics your Python code functionality
-    Returns current thermostat data from EnteliWeb
+    API endpoint that fetches thermostat data using configurable object mapping
     """
     try:
         data = {}
         
-        # Fetch temperature (AI201001 - IP_ZONE_Temperature)
-        temp_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-input,201001/present-value?alt=json"
-        response = requests.get(temp_url, headers=auth_header, timeout=10)
-        if response.ok:
-            temp_data = response.json()
-            data['temperature'] = float(temp_data.get('value', 0))
+        # Helper function to fetch BACnet object value
+        def fetch_object_value(object_id):
+            url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{object_id}/present-value?alt=json"
+            try:
+                response = requests.get(url, headers=auth_header, timeout=10)
+                if response.ok:
+                    return response.json().get('value')
+                else:
+                    print(f"Failed to fetch {object_id}: HTTP {response.status_code}")
+                    return None
+            except Exception as e:
+                print(f"Error fetching {object_id}: {e}")
+                return None
         
-        # Fetch zone setpoint (AV1 - CTRL_ActiveZoneSetpoint)
-        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,1/present-value?alt=json"
-        response = requests.get(setpoint_url, headers=auth_header, timeout=10)
-        if response.ok:
-            setpoint_data = response.json()
-            data['setpoint'] = float(setpoint_data.get('value', 0))
+        # Fetch temperature
+        temp_value = fetch_object_value(OBJECTS['temperature'])
+        if temp_value is not None:
+            data['temperature'] = float(temp_value)
         
-        # Fetch system mode (MV2 - multi-state-value,2)
-        mode_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/present-value?alt=json"
+        # Fetch setpoints based on configuration
+        if DISPLAY_CONFIG['use_dual_setpoints']:
+            # Dual setpoint system
+            heating_sp = fetch_object_value(OBJECTS['heating_setpoint'])
+            cooling_sp = fetch_object_value(OBJECTS['cooling_setpoint'])
+            if heating_sp is not None:
+                data['heating_setpoint'] = float(heating_sp)
+            if cooling_sp is not None:
+                data['cooling_setpoint'] = float(cooling_sp)
+        else:
+            # Single setpoint system
+            zone_sp = fetch_object_value(OBJECTS['zone_setpoint'])
+            if zone_sp is not None:
+                data['zone_setpoint'] = float(zone_sp)
+        
+        # Fetch system mode (handle complex formats)
+        mode_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{OBJECTS['system_mode']}/present-value?alt=json"
         response = requests.get(mode_url, headers=auth_header, timeout=10)
         if response.ok:
             mode_data = response.json()
+            
+            # Handle different mode value formats
             mode_value = mode_data.get('value', '3')
+            if isinstance(mode_value, dict) and 'enumerated' in mode_value:
+                # Handle Choice object format
+                mode_value = mode_value['enumerated'].get('value', '3')
             
-            # Debug print
-            print(f"DEBUG: mode_value = {mode_value}, type = {type(mode_value)}")
-            
-            # Convert string to integer
             try:
-                mode_number = int(mode_value)
-                print(f"DEBUG: mode_number = {mode_number}")
+                mode_number = int(str(mode_value))
+                mode_map = {1: 'Heating', 2: 'Cooling', 3: 'Deadband'}
+                data['system_mode'] = mode_map.get(mode_number, 'Deadband')
             except:
-                mode_number = 3
-                print(f"DEBUG: Failed to convert, using default 3")
-            
-            # Map numeric values to text
-            mode_map = {
-                1: 'Heating',
-                2: 'Cooling', 
-                3: 'Deadband'
-            }
-            
-            mode_text = mode_map.get(mode_number, 'Deadband')
-            print(f"DEBUG: mode_text = {mode_text}")
-            data['system_mode'] = mode_text
-            
-            # Set heating and cooling based on mode
-            data['heating'] = mode_number == 1
-            data['cooling'] = mode_number == 2
-        else:
-            print(f"DEBUG: Failed to get MV2 data")
-            data['system_mode'] = 'Error'
+                data['system_mode'] = 'Unknown'
         
-        # Fetch peak savings mode status (BV2025)
-        peak_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-value,2025/present-value?alt=json"
-        response = requests.get(peak_url, headers=auth_header, timeout=10)
-        if response.ok:
-            peak_data = response.json()
-            peak_value = peak_data.get('value')
-            data['peak_savings'] = peak_value == 'active' or peak_value == 'Active' or peak_value == 'On' or peak_value == True or peak_value == 1
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,1/present-value?alt=json"
-        response = requests.get(fan_url, headers=auth_header, timeout=10)
-        if response.ok:
-            fan_data = response.json()
-            fan_value = fan_data.get('value')
-            data['fan'] = fan_value == 'active' or fan_value == 'Active' or fan_value == 'On' or fan_value == True or fan_value == 1
+        # Fetch peak savings status
+        peak_value = fetch_object_value(OBJECTS['peak_savings'])
+        if peak_value is not None:
+            data['peak_savings'] = str(peak_value).lower() in ['active', 'on', 'true', '1']
         
-        # Fetch device name from DEV object
-        device_name_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/object-name?alt=json"
+        # Fetch fan status
+        fan_value = fetch_object_value(OBJECTS['fan_status'])
+        if fan_value is not None:
+            data['fan_status'] = str(fan_value).lower() in ['active', 'on', 'true', '1']
+        
+        # Fetch device name
+        device_name_obj = OBJECTS['device_name'].format(DEVICE=DEVICE)
+        device_name_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{device_name_obj}?alt=json"
         response = requests.get(device_name_url, headers=auth_header, timeout=10)
         if response.ok:
-            device_name_data = response.json()
-            data['device_name'] = device_name_data.get('value', f'Device {DEVICE}')
+            device_data = response.json()
+            data['device_name'] = device_data.get('value', f'Device {DEVICE}')
         else:
-            # Try device-name property as backup
-            device_name_url2 = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/device-name?alt=json"
-            response2 = requests.get(device_name_url2, headers=auth_header, timeout=10)
-            if response2.ok:
-                device_name_data2 = response2.json()
-                data['device_name'] = device_name_data2.get('value', f'Device {DEVICE}')
-            else:
-                data['device_name'] = f'Device {DEVICE}'
+            data['device_name'] = f'Device {DEVICE}'
+        
+        data['timestamp'] = datetime.now().isoformat()
         return jsonify(data)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({{'error': str(e)}}), 500
 
 @app.route('/api/debug')
 def debug_values():
-    """Debug endpoint to see raw values from BACnet objects"""
+    """Debug endpoint to see all configured objects and their raw values"""
     try:
-        debug_data = {}
+        debug_data = {{
+            'configuration': {{
+                'server': SERVER,
+                'site': SITE,
+                'device': DEVICE,
+                'objects': OBJECTS,
+                'display_config': DISPLAY_CONFIG
+            }},
+            'raw_values': {{}}
+        }}
         
-        # Debug MV2 - get both present-value and state-text
-        mv2_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/present-value?alt=json"
-        response = requests.get(mv2_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['mv2_present_value'] = response.json()
-        
-        # Try to get state text for MV2
-        mv2_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,2/state-text?alt=json"
-        response = requests.get(mv2_text_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['mv2_state_text'] = response.json()
-        
-        # Debug BO1 - fan status
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,1/present-value?alt=json"
-        response = requests.get(fan_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['bo1_present_value'] = response.json()
+        # Fetch all configured objects
+        for obj_name, obj_id in OBJECTS.items():
+            if obj_name == 'device_name':
+                continue  # Skip device name as it needs special handling
+                
+            url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{obj_id}/present-value?alt=json"
+            try:
+                response = requests.get(url, headers=auth_header, timeout=10)
+                if response.ok:
+                    debug_data['raw_values'][obj_name] = response.json()
+                else:
+                    debug_data['raw_values'][obj_name] = f"HTTP {response.status_code}"
+            except Exception as e:
+                debug_data['raw_values'][obj_name] = f"Error: {str(e)}"
         
         return jsonify(debug_data)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({{'error': str(e)}}), 500
 
 if __name__ == '__main__':
-    print(f"Starting Thermostat Dashboard Server...")
-    print(f"EnteliWeb Server: {SERVER}")
+    print(f"Starting Configurable Thermostat Dashboard...")
+    print(f"Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
+    print(f"Setpoint Mode: {'Dual' if DISPLAY_CONFIG['use_dual_setpoints'] else 'Single'}")
     print(f"Dashboard URL: http://localhost:8000")
-    print(f"API Test: http://localhost:8000/api/thermostat")
-    print("\nMake sure to update the PASSWORD variable with your actual password!")
+    print(f"Debug URL: http://localhost:8000/api/debug")
     
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
