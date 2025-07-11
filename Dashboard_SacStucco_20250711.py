@@ -11,6 +11,7 @@ import base64
 import os
 from datetime import datetime, timedelta
 import json
+import pytz
 
 app = Flask(__name__)
 
@@ -407,7 +408,7 @@ def index():
                 }}
                 
                 updateChart(data);
-                document.getElementById('chartStatus').textContent = `Loaded ${{data.records.length}} data points`;
+                document.getElementById('chartStatus').textContent = `Loaded ${{data.records.length}} data points for ${{data.actual_range}}`;
                 document.getElementById('chartStatus').className = 'last-updated';
                 
             }} catch (error) {{
@@ -573,47 +574,64 @@ def get_thermostat_data():
 
 @app.route('/api/trends')
 def get_trend_data():
+    """
+    FIXED: Get trend data with proper time filtering
+    """
     try:
         time_range = request.args.get('range', '1h')
         
+        # Get current time
         now = datetime.now()
+        
+        # Calculate the EXACT time range we want
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
-            max_results = 20  # 1 hour at 5-min intervals = 12 points, plus buffer
+            max_results = 500  # Get more data than needed, then filter
         elif time_range == '4h':
             start_time = now - timedelta(hours=4)
-            max_results = 60  # 4 hours at 5-min intervals = 48 points, plus buffer
+            max_results = 500
         elif time_range == '12h':
             start_time = now - timedelta(hours=12)
-            max_results = 150  # 12 hours at 5-min intervals = 144 points, plus buffer
+            max_results = 1000
         elif time_range == '24h':
             start_time = now - timedelta(hours=24)
-            max_results = 300  # 24 hours at 5-min intervals = 288 points, plus buffer
+            max_results = 2000
         elif time_range == '7d':
             start_time = now - timedelta(days=7)
-            max_results = 2020  # 7 days at 5-min intervals = 2016 points, plus buffer
+            max_results = 5000
         else:
             start_time = now - timedelta(hours=1)
-            max_results = 20
+            max_results = 500
         
+        print(f"DEBUG: Requesting {time_range} trend data")
+        print(f"DEBUG: Now: {now}")
+        print(f"DEBUG: Start time: {start_time}")
+        print(f"DEBUG: Time difference: {now - start_time}")
+        
+        # Try to get trend data - sometimes the API time filters don't work well
+        # so we'll get a larger dataset and filter it ourselves
         url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
         
-        params = dict()
-        params["published-ge"] = start_time.isoformat()
-        params["published-le"] = now.isoformat()
-        params["alt"] = "json"
-        params["max-results"] = max_results
+        # Get trend data without time filter first, then filter ourselves
+        params = {
+            "alt": "json",
+            "max-results": max_results
+        }
         
-        print(f"DEBUG: Requesting {time_range} from {start_time.isoformat()} to {now.isoformat()}, max-results: {max_results}")
+        print(f"DEBUG: Making API request with max-results: {max_results}")
         
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
         data = r.json()
         
-        rows = []
+        print(f"DEBUG: API returned {len(data)} items")
+        
+        # Process the data
+        all_rows = []
         for v in data.values():
             if not isinstance(v, dict) or "timestamp" not in v:
                 continue
+                
             ld = v.get("logDatum", dict())
             val = None
             for k, w in ld.items():
@@ -625,121 +643,56 @@ def get_trend_data():
             
             timestamp_str = v["timestamp"]["value"]
             try:
+                # Parse the timestamp
                 timestamp_dt = datetime.fromisoformat(timestamp_str.replace('T', ' '))
                 
-                # Double-check that the timestamp is actually within our requested range
-                if timestamp_dt < start_time:
-                    continue  # Skip records older than requested
+                row = {
+                    'timestamp': timestamp_str,
+                    'temperature': float(val),
+                    'datetime': timestamp_dt
+                }
+                all_rows.append(row)
                 
-                if time_range in ['1h', '4h']:
-                    formatted_time = timestamp_dt.strftime('%H:%M')
-                elif time_range in ['12h', '24h']:
-                    formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
-                else:
-                    formatted_time = timestamp_dt.strftime('%m/%d')
-                
-                row = dict()
-                row['timestamp'] = timestamp_str
-                row['temperature'] = float(val)
-                row['formatted_time'] = formatted_time
-                row['sort_time'] = timestamp_dt
-                rows.append(row)
-            except:
+            except Exception as e:
+                print(f"DEBUG: Error parsing timestamp {timestamp_str}: {e}")
                 continue
         
-        rows.sort(key=lambda x: x['sort_time'])
+        print(f"DEBUG: Parsed {len(all_rows)} valid records")
         
-        for row in rows:
-            del row['sort_time']
+        # Sort by timestamp
+        all_rows.sort(key=lambda x: x['datetime'])
         
-        # Only downsample 7d view if we have too many points for display
-        if time_range == '7d' and len(rows) > 300:
-            step = len(rows) // 300
-            rows = rows[::step]
+        # NOW filter by our desired time range
+        filtered_rows = []
+        for row in all_rows:
+            if row['datetime'] >= start_time:
+                filtered_rows.append(row)
         
-        print(f"DEBUG: Final result - {len(rows)} records for {time_range}")
+        print(f"DEBUG: After time filtering: {len(filtered_rows)} records")
+        print(f"DEBUG: Oldest record: {filtered_rows[0]['datetime'] if filtered_rows else 'None'}")
+        print(f"DEBUG: Newest record: {filtered_rows[-1]['datetime'] if filtered_rows else 'None'}")
         
-        result = dict()
-        result['records'] = rows
-        result['time_range'] = time_range
-        result['start_time'] = start_time.isoformat()
-        result['end_time'] = now.isoformat()
-        result['total_records'] = len(rows)
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        error_result = dict()
-        error_result['error'] = str(e)
-        error_result['records'] = []
-        error_result['total_records'] = 0
-        return jsonify(error_result)
-
-@app.route('/api/debug')
-def debug_values():
-    """Debug endpoint to see raw values from BACnet objects"""
-    try:
-        debug_data = {}
-        
-        # Debug system mode
-        mv_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/present-value?alt=json"
-        response = requests.get(mv_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['system_mode_present_value'] = response.json()
-        
-        # Try to get state text for system mode
-        mv_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/state-text?alt=json"
-        response = requests.get(mv_text_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['system_mode_state_text'] = response.json()
-        
-        # Debug fan status
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
-        response = requests.get(fan_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['fan_status_present_value'] = response.json()
-        
-        # NEW: Debug trend log info
-        trend_info_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/object-name?alt=json"
-        response = requests.get(trend_info_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['trend_log_name'] = response.json()
-        else:
-            debug_data['trend_log_name_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
-        
-        # NEW: Test trend log with no time filter (get last 5 records)
-        trend_test_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=5&alt=json"
-        response = requests.get(trend_test_url, headers=auth_header, timeout=10)
-        if response.ok:
-            trend_test_data = response.json()
-            debug_data['trend_log_test'] = {
-                'total_keys': len(trend_test_data),
-                'sample_keys': list(trend_test_data.keys())[:10],
-                'sample_record': None
+        # Format the timestamps for display
+        final_rows = []
+        for row in filtered_rows:
+            timestamp_dt = row['datetime']
+            
+            if time_range in ['1h', '4h']:
+                formatted_time = timestamp_dt.strftime('%H:%M')
+            elif time_range in ['12h', '24h']:
+                formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
+            else:  # 7d
+                formatted_time = timestamp_dt.strftime('%m/%d')
+            
+            final_row = {
+                'timestamp': row['timestamp'],
+                'temperature': row['temperature'],
+                'formatted_time': formatted_time
             }
-            # Get one sample record
-            for key, value in trend_test_data.items():
-                if key != '$base':
-                    debug_data['trend_log_test']['sample_record'] = value
-                    break
-        else:
-            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
+            final_rows.append(final_row)
         
-        return jsonify(debug_data)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    print(f"Starting Enhanced Thermostat Dashboard Server...")
-    print(f"EnteliWeb Server: {SERVER}")
-    print(f"Site: {SITE}")
-    print(f"Device: {DEVICE}")
-    print(f"Temperature Trend Log Instance: {TEMP_TREND_LOG_INSTANCE}")
-    print(f"Dashboard URL: http://localhost:8000")
-    print(f"API Test: http://localhost:8000/api/thermostat")
-    print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
-    print(f"Debug API: http://localhost:8000/api/debug")
-    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
-    
-    app.run(host='0.0.0.0', port=8000, debug=True)
+        # For very long time ranges, downsample to keep chart readable
+        if time_range == '7d' and len(final_rows) > 300:
+            step = len(final_rows) // 300
+            final_rows = final_rows[::step]
+            print(f"DEBUG
