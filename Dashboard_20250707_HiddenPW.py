@@ -564,13 +564,19 @@ def get_trend_data():
         trend_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?published-ge={start_str}&published-le={end_str}&alt=json"
         
         print(f"DEBUG: Fetching trend data from {trend_url}")
+        print(f"DEBUG: Time range: {start_str} to {end_str}")
         
         response = requests.get(trend_url, headers=auth_header, timeout=30)
         
+        print(f"DEBUG: Response status: {response.status_code}")
+        
         if not response.ok:
-            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code}'}), 500
+            print(f"DEBUG: Response text: {response.text[:500]}")
+            return jsonify({'error': f'Failed to fetch trend data: HTTP {response.status_code} - {response.text[:200]}'}), 500
         
         trend_data = response.json()
+        print(f"DEBUG: Raw trend data keys: {list(trend_data.keys())[:10]}")  # Show first 10 keys
+        print(f"DEBUG: Total keys in response: {len(trend_data)}")
         
         # Process the trend data
         records = []
@@ -581,6 +587,8 @@ def get_trend_data():
                 continue
                 
             try:
+                print(f"DEBUG: Processing record {seq_num}: {record}")
+                
                 # Extract timestamp
                 timestamp_str = record['timestamp']['value']
                 timestamp = datetime.fromisoformat(timestamp_str.replace('T', ' '))
@@ -589,12 +597,16 @@ def get_trend_data():
                 log_datum = record['logDatum']
                 temp_value = None
                 
+                print(f"DEBUG: LogDatum for {seq_num}: {log_datum}")
+                
                 if 'real-value' in log_datum:
                     temp_value = float(log_datum['real-value']['value'])
                 elif 'unsigned-value' in log_datum:
                     temp_value = float(log_datum['unsigned-value']['value'])
                 elif 'signed-value' in log_datum:
                     temp_value = float(log_datum['signed-value']['value'])
+                else:
+                    print(f"DEBUG: Unknown log datum type in {seq_num}: {log_datum}")
                 
                 if temp_value is not None:
                     # Format time for display
@@ -611,19 +623,24 @@ def get_trend_data():
                         'temperature': temp_value,
                         'formatted_time': formatted_time
                     })
+                    print(f"DEBUG: Added record: temp={temp_value}, time={formatted_time}")
                     
             except Exception as e:
                 print(f"DEBUG: Error processing record {seq_num}: {e}")
+                print(f"DEBUG: Record content: {record}")
                 continue
         
         # Sort records by timestamp
         records.sort(key=lambda x: x['timestamp'])
+        
+        print(f"DEBUG: Final records count: {len(records)}")
         
         # For longer time ranges, we might want to downsample the data
         if time_range == '7d' and len(records) > 200:
             # Take every nth record to reduce data points
             step = len(records) // 200
             records = records[::step]
+            print(f"DEBUG: Downsampled to {len(records)} records")
         
         return jsonify({
             'records': records,
@@ -635,6 +652,8 @@ def get_trend_data():
         
     except Exception as e:
         print(f"DEBUG: Error in get_trend_data: {e}")
+        import traceback
+        print(f"DEBUG: Full traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug')
