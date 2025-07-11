@@ -508,19 +508,26 @@ def get_thermostat_data():
         # Helper function to fetch BACnet object value
         def fetch_object_value(object_id):
             url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/{object_id}/present-value?alt=json"
+            print(f"Fetching {object_id} from: {url}")
             try:
                 response = requests.get(url, headers=auth_header, timeout=10)
+                print(f"Response for {object_id}: HTTP {response.status_code}")
                 if response.ok:
                     response_data = response.json()
+                    print(f"Response data for {object_id}: {response_data}")
                     # Handle different response formats
                     if isinstance(response_data, dict):
                         if 'value' in response_data:
+                            print(f"Found value for {object_id}: {response_data['value']}")
                             return response_data['value']
                         elif '$base' in response_data and 'value' in response_data:
+                            print(f"Found $base value for {object_id}: {response_data['value']}")
                             return response_data['value']
+                    print(f"Returning raw data for {object_id}: {response_data}")
                     return response_data
                 else:
                     print(f"Failed to fetch {object_id}: HTTP {response.status_code}")
+                    print(f"Response text: {response.text}")
                     return None
             except Exception as e:
                 print(f"Error fetching {object_id}: {e}")
