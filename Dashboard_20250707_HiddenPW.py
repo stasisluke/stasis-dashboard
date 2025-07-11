@@ -355,9 +355,17 @@ def index():
                 document.getElementById('chartStatus').textContent = 'Loading trend data...';
                 document.getElementById('chartStatus').className = 'loading';
                 
-                // Update active button
-                document.querySelectorAll('.time-range-btn').forEach(btn => btn.classList.remove('active'));
-                event.target.classList.add('active');
+                // Update active button - find the clicked button
+                document.querySelectorAll('.time-range-btn').forEach(btn => {{
+                    btn.classList.remove('active');
+                    if (btn.textContent.includes(timeRange === '1h' ? 'Hour' : 
+                        timeRange === '4h' ? '4 Hours' : 
+                        timeRange === '12h' ? '12 Hours' : 
+                        timeRange === '24h' ? '24 Hours' : '7 Days')) {{
+                        btn.classList.add('active');
+                    }}
+                }});
+                
                 currentTimeRange = timeRange;
                 
                 const response = await fetch(`/api/trends?range=${{timeRange}}`);
