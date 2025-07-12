@@ -51,12 +51,12 @@ auth_header = {
 # ------------------------------------------------------------
 
 def fetch_enteli_pages(base_url: str, params: dict):
-    """Yield every page of a log‑buffer, automatically following $next links."""
+    """Yield every page of a log‑buffer, automatically following next links."""
     url = base_url
     first = True
     page_count = 0
-    while url and page_count < 10:  # Safety limit
-        print(f"DEBUG: Fetching page {page_count + 1}: {url}")
+    while url and page_count < 50:  # Safety limit
+        print(f"DEBUG: Fetching page {page_count + 1}: {url[:100]}...")
         resp = requests.get(
             url,
             params=params if first else None,  # only supply params on the first call
@@ -66,18 +66,20 @@ def fetch_enteli_pages(base_url: str, params: dict):
         resp.raise_for_status()
         page = resp.json()
         
-        print(f"DEBUG: Page {page_count + 1} keys: {list(page.keys())}")
-        print(f"DEBUG: Page {page_count + 1} has 'next' key: {'next' in page}")
-        print(f"DEBUG: Page {page_count + 1} has '$next' key: {'$next' in page}")
+        # Count actual data records (skip $base and next)
+        data_keys = [k for k in page.keys() if k not in ('$base', 'next')]
+        print(f"DEBUG: Page {page_count + 1} has {len(data_keys)} data records")
         
         yield page
         
-        # Try both possible next keys
-        url = page.get("next") or page.get("$next")
-        print(f"DEBUG: Next URL: {url}")
+        # Get next URL - it's just "next", not "$next"
+        url = page.get("next")
+        print(f"DEBUG: Next URL exists: {bool(url)}")
         
         first = False
         page_count += 1
+        
+    print(f"DEBUG: Pagination complete after {page_count} pages")
 
 @app.route('/')
 def index():
