@@ -9,7 +9,7 @@ from flask import Flask, request, jsonify, send_from_directory
 import requests
 import base64
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 
 app = Flask(__name__)
@@ -668,7 +668,7 @@ def get_trend_data():
         debug_info = []  # Initialize debug_info at the start
         
         # Use UTC time with proper timezone formatting for EnteliWeb
-        now = datetime.utcnow()
+        now = datetime.utcnow().replace(tzinfo=timezone.utc)
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
             max_results = 20
@@ -704,7 +704,9 @@ def get_trend_data():
             params["alt"] = "json"
             params["max-results"] = max_results
             debug_info.append(f"Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
-                
+        
+        print(f"DEBUG: Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
+        
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
         data = r.json()
@@ -761,10 +763,17 @@ def get_trend_data():
             
             timestamp_str = v["timestamp"]["value"]
             try:
-                # Handle the timestamp format from debug data: "2025-07-11T04:45:00.02"
-                # Remove the fractional seconds part if it exists
-                clean_timestamp = timestamp_str.split('.')[0] if '.' in timestamp_str else timestamp_str
-                timestamp_dt = datetime.fromisoformat(clean_timestamp)
+                # FIXED: Keep timezone info instead of stripping it
+                # Handle both Z format and offset format
+                if timestamp_str.endswith('Z'):
+                    # Convert Z to explicit +00:00
+                    timestamp_str_fixed = timestamp_str.replace('Z', '+00:00')
+                else:
+                    # Keep the original if it already has offset
+                    timestamp_str_fixed = timestamp_str
+                
+                # Parse with timezone information intact
+                timestamp_dt = datetime.fromisoformat(timestamp_str_fixed)
                 
                 if time_range in ['1h', '4h']:
                     formatted_time = timestamp_dt.strftime('%H:%M')
@@ -790,6 +799,7 @@ def get_trend_data():
         # NEW: For 7d view, detect gaps and interpolate, and also filter to last 7 days
         if time_range == '7d' and len(rows) > 1:
             # First, filter to only the last 7 days since we got ALL data
+            # Now both timestamps are timezone-aware so comparison will work correctly
             seven_days_ago = now - timedelta(days=7)
             filtered_rows = [row for row in rows if row['sort_time'] >= seven_days_ago]
             debug_info.append(f"After filtering to last 7 days: {len(filtered_rows)} records")
