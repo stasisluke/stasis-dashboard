@@ -705,7 +705,6 @@ def get_trend_data():
             params["max-results"] = max_results
             debug_info.append(f"Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
         
-        print(f"DEBUG: Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
         
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
