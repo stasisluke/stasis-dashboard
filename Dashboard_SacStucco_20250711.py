@@ -761,17 +761,15 @@ def get_trend_data():
             
             timestamp_str = v["timestamp"]["value"]
             try:
-                # FIXED: Keep timezone info instead of stripping it
-                # Handle both Z format and offset format
-                if timestamp_str.endswith('Z'):
-                    # Convert Z to explicit +00:00
-                    timestamp_str_fixed = timestamp_str.replace('Z', '+00:00')
+                # FIXED: Handle timestamp properly to keep timezone info
+                # Force all timestamps to be timezone-aware to avoid astimezone() crashes
+                if 'Z' in timestamp_str or '+' in timestamp_str or timestamp_str.count('-') > 2:
+                    # Has timezone info, parse directly
+                    timestamp_dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                 else:
-                    # Keep the original if it already has offset
-                    timestamp_str_fixed = timestamp_str
-                
-                # Parse with timezone information intact
-                timestamp_dt = datetime.fromisoformat(timestamp_str_fixed)
+                    # No timezone info, remove fractional seconds and assume UTC
+                    clean_timestamp = timestamp_str.split('.')[0] if '.' in timestamp_str else timestamp_str
+                    timestamp_dt = datetime.fromisoformat(clean_timestamp).replace(tzinfo=timezone.utc)
                 
                 if time_range in ['1h', '4h']:
                     formatted_time = timestamp_dt.strftime('%H:%M')
@@ -794,13 +792,21 @@ def get_trend_data():
         
         rows.sort(key=lambda x: x['sort_time'])
         
-        # NEW: For 7d view, just use all available data and interpolate gaps
+        # NEW: For 7d view, detect gaps and interpolate, and also filter to last 7 days
         if time_range == '7d' and len(rows) > 1:
-            debug_info.append(f"7d view: Using all {len(rows)} available records")
+            # First, filter to only the last 7 days since we got ALL data
+            # Use astimezone() to properly convert timezones instead of replace()
+            seven_days_ago = now - timedelta(days=7)
+            filtered_rows = [row for row in rows if row['sort_time'].astimezone(timezone.utc) >= seven_days_ago]
             
-            # Interpolate gaps in all available data
-            rows = interpolate_gaps(rows, expected_interval_minutes=5, time_range=time_range)
-            debug_info.append(f"After interpolation: {len(rows)} records")
+            debug_info.append(f"After filtering to last 7 days: {len(filtered_rows)} records")
+            
+            # Then interpolate gaps
+            if len(filtered_rows) > 1:
+                rows = interpolate_gaps(filtered_rows, expected_interval_minutes=5, time_range=time_range)
+                debug_info.append(f"After interpolation: {len(rows)} records")
+            else:
+                rows = filtered_rows
         elif time_range == '7d':
             debug_info.append(f"7d view: Only {len(rows)} records available, no interpolation needed")
         
