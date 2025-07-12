@@ -55,20 +55,28 @@ def fetch_enteli_pages(base_url: str, params: dict):
     url = base_url
     first = True
     page_count = 0
+    
+    # Prepare params for first and subsequent requests
+    params_first = params.copy()  # alt=json, max-results=…
+    params_next = {"alt": "json"}  # only alt=json
+    
     while url and page_count < 50:  # Safety limit
         print(f"DEBUG: Fetching page {page_count + 1}: {url[:100]}...")
         
-        if first:
-            # First request with params
-            resp = requests.get(url, params=params, headers=auth_header, timeout=30)
-        else:
-            # Subsequent requests: add alt=json to the URL if not already there
-            if 'alt=json' not in url:
-                separator = '&' if '?' in url else '?'
-                url = url + separator + 'alt=json'
-            resp = requests.get(url, headers=auth_header, timeout=30)
-        
+        resp = requests.get(
+            url,
+            params=params_first if first else params_next,
+            headers=auth_header,
+            timeout=30,
+        )
         resp.raise_for_status()
+        
+        # Check content type to make sure we got JSON
+        if "application/json" not in resp.headers.get("Content-Type", ""):
+            print(f"ERROR: Page {page_count + 1} returned {resp.headers.get('Content-Type')}")
+            print(f"Response text: {resp.text[:200]}")
+            break
+            
         page = resp.json()
         
         # Count actual data records (skip $base and next)
@@ -77,7 +85,7 @@ def fetch_enteli_pages(base_url: str, params: dict):
         
         yield page
         
-        # Get next URL - it's just "next", not "$next"
+        # Get next URL
         url = page.get("next")
         print(f"DEBUG: Next URL exists: {bool(url)}")
         
@@ -893,7 +901,7 @@ def test_pagination():
     while url and page_num < 3:  # Just test 3 pages
         page_num += 1
         try:
-            resp = requests.get(url, params=params if page_num == 1 else None, headers=auth_header, timeout=30)
+            resp = requests.get(url, params=params if page_num == 1 else {"alt": "json"}, headers=auth_header, timeout=30)
             results.append(f"Page {page_num}: HTTP {resp.status_code}")
             
             if resp.status_code != 200:
