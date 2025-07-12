@@ -749,14 +749,19 @@ def get_trend_data():
                 if isinstance(real_val, dict) and "value" in real_val:
                     val = real_val["value"]
             
-            # Fallback to the original logic for other value types
+            # Improved value extraction - handle any *-value pattern
             if val is None:
                 for k, w in ld.items():
-                    if k.endswith("-value"):
-                        val = w.get("value") if isinstance(w, dict) else w
-                        break
+                    if isinstance(w, dict) and 'value' in w:
+                        try:
+                            val = float(w['value'])
+                            break
+                        except (TypeError, ValueError):
+                            continue
                         
+            # DEBUG: Show what we're skipping
             if val is None:
+                debug_info.append(f"SKIP record {key}: no valid value in {list(ld.keys())}")
                 continue
             
             timestamp_str = v["timestamp"]["value"]
