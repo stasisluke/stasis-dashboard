@@ -887,16 +887,31 @@ def test_pagination():
     
     while url and page_num < 3:  # Just test 3 pages
         page_num += 1
-        resp = requests.get(url, params=params if page_num == 1 else None, headers=auth_header)
-        data = resp.json()
-        
-        record_count = len([k for k in data.keys() if k not in ('$base', 'next')])
-        results.append(f"Page {page_num}: {record_count} records")
-        
-        url = data.get('next')
-        results.append(f"Next URL: {url is not None}")
-        
-        if not url:
+        try:
+            resp = requests.get(url, params=params if page_num == 1 else None, headers=auth_header, timeout=30)
+            results.append(f"Page {page_num}: HTTP {resp.status_code}")
+            
+            if resp.status_code != 200:
+                results.append(f"Error: {resp.text[:200]}")
+                break
+                
+            data = resp.json()
+            record_count = len([k for k in data.keys() if k not in ('$base', 'next')])
+            results.append(f"Page {page_num}: {record_count} records")
+            
+            url = data.get('next')
+            results.append(f"Next URL exists: {url is not None}")
+            
+            if not url:
+                results.append("No more pages")
+                break
+                
+        except requests.exceptions.JSONDecodeError as e:
+            results.append(f"Page {page_num}: JSON decode error")
+            results.append(f"Response text: {resp.text[:200]}")
+            break
+        except Exception as e:
+            results.append(f"Page {page_num}: Error - {str(e)}")
             break
     
     return {"results": results}
