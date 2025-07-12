@@ -57,12 +57,17 @@ def fetch_enteli_pages(base_url: str, params: dict):
     page_count = 0
     while url and page_count < 50:  # Safety limit
         print(f"DEBUG: Fetching page {page_count + 1}: {url[:100]}...")
-        resp = requests.get(
-            url,
-            params=params if first else None,  # only supply params on the first call
-            headers=auth_header,
-            timeout=30,
-        )
+        
+        if first:
+            # First request with params
+            resp = requests.get(url, params=params, headers=auth_header, timeout=30)
+        else:
+            # Subsequent requests: add alt=json to the URL if not already there
+            if 'alt=json' not in url:
+                separator = '&' if '?' in url else '?'
+                url = url + separator + 'alt=json'
+            resp = requests.get(url, headers=auth_header, timeout=30)
+        
         resp.raise_for_status()
         page = resp.json()
         
