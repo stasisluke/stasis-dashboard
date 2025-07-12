@@ -704,7 +704,7 @@ def get_trend_data():
             params["alt"] = "json"
             params["max-results"] = max_results
             debug_info.append(f"Requesting {time_range} from {params['published-ge']} to {params['published-le']}, max-results: {max_results}")
-                
+        
         r = requests.get(url, params=params, headers=auth_header, timeout=30)
         r.raise_for_status()
         data = r.json()
@@ -794,22 +794,15 @@ def get_trend_data():
         
         rows.sort(key=lambda x: x['sort_time'])
         
-        # NEW: For 7d view, detect gaps and interpolate, and also filter to last 7 days
+        # NEW: For 7d view, just use all available data and interpolate gaps
         if time_range == '7d' and len(rows) > 1:
-            # First, filter to only the last 7 days since we got ALL data
-            # Now both timestamps are timezone-aware so comparison will work correctly
-            seven_days_ago = now - timedelta(days=7)
-            filtered_rows = [row for row in rows if row['sort_time'] >= seven_days_ago]
-            debug_info.append(f"After filtering to last 7 days: {len(filtered_rows)} records")
+            debug_info.append(f"7d view: Using all {len(rows)} available records")
             
-            # Then interpolate gaps
-            if len(filtered_rows) > 1:
-                rows = interpolate_gaps(filtered_rows, expected_interval_minutes=5, time_range=time_range)
-                debug_info.append(f"After interpolation: {len(rows)} records")
-            else:
-                rows = filtered_rows
+            # Interpolate gaps in all available data
+            rows = interpolate_gaps(rows, expected_interval_minutes=5, time_range=time_range)
+            debug_info.append(f"After interpolation: {len(rows)} records")
         elif time_range == '7d':
-            debug_info.append("7d view but insufficient data for interpolation")
+            debug_info.append(f"7d view: Only {len(rows)} records available, no interpolation needed")
         
         for row in rows:
             del row['sort_time']
