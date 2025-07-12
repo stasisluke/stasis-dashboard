@@ -792,23 +792,15 @@ def get_trend_data():
         
         rows.sort(key=lambda x: x['sort_time'])
         
-        # NEW: For 7d view, detect gaps and interpolate, and also filter to last 7 days
+        # NEW: For 7d view, just use all available data and interpolate gaps
         if time_range == '7d' and len(rows) > 1:
-            # First, filter to only the last 7 days since we got ALL data
-            # Use astimezone() to properly convert timezones instead of replace()
-            seven_days_ago = now - timedelta(days=7)
-            filtered_rows = [row for row in rows if row['sort_time'].astimezone(timezone.utc) >= seven_days_ago]
+            debug_info.append(f"7d view: Using all {len(rows)} available records (no time filtering)")
             
-            debug_info.append(f"After filtering to last 7 days: {len(filtered_rows)} records")
-            
-            # Then interpolate gaps
-            if len(filtered_rows) > 1:
-                rows = interpolate_gaps(filtered_rows, expected_interval_minutes=5, time_range=time_range)
-                debug_info.append(f"After interpolation: {len(rows)} records")
-            else:
-                rows = filtered_rows
+            # Interpolate gaps in all available data
+            rows = interpolate_gaps(rows, expected_interval_minutes=5, time_range=time_range)
+            debug_info.append(f"After interpolation: {len(rows)} records")
         elif time_range == '7d':
-            debug_info.append(f"7d view: Only {len(rows)} records available, no interpolation needed")
+            debug_info.append(f"7d view: Only {len(rows)} records available from API")
         
         for row in rows:
             del row['sort_time']
