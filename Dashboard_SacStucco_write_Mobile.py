@@ -1006,7 +1006,7 @@ def index():
         function hideLoadingState() {{
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('setpointControls').style.display = 'flex';
-            document.getElementById('lockoutSection').style.display = 'flex';
+            document.getElementById('lockoutControls').style.display = 'flex';
         }}
         
         function updateCurrentDisplay(data) {{
