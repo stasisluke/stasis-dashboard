@@ -1,12 +1,6 @@
-# Prepare the request body
-        request_body = {
-            "$base": "Real",
-            "value": str(new_setpoint)
-        }
-        print(f"Request body: {request_body}", flush=True)
-        app.logger.info(f"Body: {request_body}")#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
-Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control
+Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
@@ -60,7 +54,7 @@ auth_header = {
 
 @app.route('/')
 def index():
-    """Serve the main dashboard HTML with setpoint controls"""
+    """Serve the main dashboard HTML with setpoint controls and thermostat lockout"""
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -229,7 +223,7 @@ def index():
             color: #2c3e50;
         }}
         
-        /* NEW: Setpoint Control Styles */
+        /* Setpoint Control Styles */
         .setpoint-controls {{
             display: flex;
             align-items: center;
@@ -305,7 +299,7 @@ def index():
             background: #229954;
         }}
         
-        /* NEW: Thermostat Lockout Styles */
+        /* Thermostat Lockout Styles */
         .lockout-controls {{
             display: flex;
             justify-content: center;
@@ -556,7 +550,7 @@ def index():
                         <div class="setpoint-value" id="setpointValue">--°F</div>
                     </div>
                     
-                    <!-- NEW: Setpoint Controls -->
+                    <!-- Setpoint Controls -->
                     <div class="setpoint-controls">
                         <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F">−</button>
                         <div class="setpoint-input-container">
@@ -566,7 +560,7 @@ def index():
                         <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F">+</button>
                     </div>
                     
-                    <!-- NEW: Thermostat Lockout Toggle -->
+                    <!-- Thermostat Lockout Toggle -->
                     <div class="lockout-controls">
                         <div class="lockout-toggle" onclick="toggleThermostatLockout()">
                             <input type="checkbox" id="lockoutCheckbox" disabled>
@@ -702,7 +696,7 @@ def index():
             }});
         }}
         
-        // NEW: Setpoint control functions
+        // Setpoint control functions
         function adjustSetpoint(change) {{
             if (currentSetpoint === null) {{
                 showStatusMessage('Current setpoint not available', 'error');
@@ -802,7 +796,7 @@ def index():
             }}
         }}
         
-        // NEW: Thermostat Lockout Functions
+        // Thermostat Lockout Functions
         function toggleThermostatLockout() {{
             thermostatLockout = !thermostatLockout;
             updateLockoutDisplay();
@@ -1291,7 +1285,7 @@ def get_trend_data():
         time_range = request.args.get('range', '1h')
         
         # Set time ranges and max results
-        now = datetime.utcnow().replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
         if time_range == '1h':
             start_time = now - timedelta(hours=1)
             max_results = 60
@@ -1405,7 +1399,7 @@ def get_trend_data():
         })
 
 if __name__ == '__main__':
-    print(f"Starting Thermostat Dashboard with AV1 Setpoint Control...")
+    print(f"Starting Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout...")
     print(f"EnteliWeb Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
@@ -1421,6 +1415,7 @@ if __name__ == '__main__':
     print(f"- +/- buttons for 1°F adjustments")
     print(f"- Manual input field for precise control")
     print(f"- Dynamic safety limits from AV{SETPOINT_MAX_AV} (max) and AV{SETPOINT_MIN_AV} (min)")
+    print(f"- Thermostat Lockout toggle for admin control")
     print(f"- Real-time feedback and status messages")
     
     app.run(host='0.0.0.0', port=8000, debug=True)
