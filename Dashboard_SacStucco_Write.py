@@ -672,6 +672,8 @@ def index():
                 
                 showStatusMessage(`Setting temperature to ${{newSetpoint}}°F...`, 'success');
                 
+                console.log('Sending setpoint request:', {{ setpoint: newSetpoint }});
+                
                 const response = await fetch('/api/setpoint', {{
                     method: 'POST',
                     headers: {{
@@ -680,7 +682,11 @@ def index():
                     body: JSON.stringify({{ setpoint: newSetpoint }})
                 }});
                 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
                 const result = await response.json();
+                console.log('Response data:', result);
                 
                 if (result.success) {{
                     showStatusMessage(`Temperature set to ${{newSetpoint}}°F successfully!`, 'success');
@@ -690,10 +696,12 @@ def index():
                     }}, 1000);
                 }} else {{
                     showStatusMessage(`Error: ${{result.error || 'Failed to set temperature'}}`, 'error');
+                    console.error('Setpoint error:', result);
                 }}
                 
             }} catch (error) {{
-                showStatusMessage(`Error: ${{error.message}}`, 'error');
+                console.error('Network error:', error);
+                showStatusMessage(`Network Error: ${{error.message}}`, 'error');
             }} finally {{
                 // Re-enable controls
                 document.querySelectorAll('.setpoint-btn, .setpoint-set-btn').forEach(btn => {{
@@ -996,39 +1004,60 @@ def get_thermostat_data():
 def set_setpoint():
     """API endpoint to write new setpoint to AV1"""
     try:
+        print(f"\n=== SETPOINT REQUEST DEBUG ===")
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Raw request data: {request.get_data()}")
+        
         # Get the new setpoint from request
         request_data = request.get_json()
+        print(f"Parsed JSON data: {request_data}")
+        
         if not request_data or 'setpoint' not in request_data:
+            print("ERROR: Missing setpoint value in request")
             return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
         
         new_setpoint = float(request_data['setpoint'])
+        print(f"New setpoint requested: {new_setpoint}")
         
         # Fetch current setpoint limits from AV10 and AV11
         setpoint_limits = {}
         
         # Fetch maximum setpoint limit (AV10)
         max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
+        print(f"Fetching max limit from: {max_url}")
         response = requests.get(max_url, headers=auth_header, timeout=10)
+        print(f"Max limit response status: {response.status_code}")
         if response.ok:
             max_data = response.json()
+            print(f"Max limit response data: {max_data}")
             setpoint_limits['max'] = float(max_data.get('value', 85))
         else:
+            print(f"Max limit fetch failed: {response.text}")
             setpoint_limits['max'] = 85
         
         # Fetch minimum setpoint limit (AV11)
         min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
+        print(f"Fetching min limit from: {min_url}")
         response = requests.get(min_url, headers=auth_header, timeout=10)
+        print(f"Min limit response status: {response.status_code}")
         if response.ok:
             min_data = response.json()
+            print(f"Min limit response data: {min_data}")
             setpoint_limits['min'] = float(min_data.get('value', 60))
         else:
+            print(f"Min limit fetch failed: {response.text}")
             setpoint_limits['min'] = 60
+        
+        print(f"Setpoint limits: {setpoint_limits}")
         
         # Validate setpoint against dynamic limits
         if new_setpoint < setpoint_limits['min'] or new_setpoint > setpoint_limits['max']:
+            error_msg = f'Setpoint must be between {setpoint_limits["min"]}°F and {setpoint_limits["max"]}°F'
+            print(f"ERROR: {error_msg}")
             return jsonify({
                 'success': False, 
-                'error': f'Setpoint must be between {setpoint_limits["min"]}°F and {setpoint_limits["max"]}°F'
+                'error': error_msg
             }), 400
         
         # Write to AV1 using the BACnet API
@@ -1042,6 +1071,7 @@ def set_setpoint():
         
         print(f"Writing setpoint {new_setpoint} to AV{SETPOINT_AV} on device {DEVICE}")
         print(f"URL: {setpoint_url}")
+        print(f"Headers: {auth_header}")
         print(f"Body: {request_body}")
         
         # Make the PUT request to write the setpoint
@@ -1052,38 +1082,61 @@ def set_setpoint():
             timeout=10
         )
         
-        print(f"Response status: {response.status_code}")
-        print(f"Response body: {response.text}")
+        print(f"BACnet write response status: {response.status_code}")
+        print(f"BACnet write response headers: {dict(response.headers)}")
+        print(f"BACnet write response body: {response.text}")
         
         if response.ok:
-            response_data = response.json()
-            
-            # Check if the BACnet response indicates success
-            error_code = response_data.get('error', '0')
-            error_text = response_data.get('errorText', 'Unknown')
-            
-            if error_code == '-1' or error_text == 'OK':
-                return jsonify({
-                    'success': True, 
-                    'setpoint': new_setpoint,
-                    'message': f'Setpoint successfully set to {new_setpoint}°F'
-                })
-            else:
+            try:
+                response_data = response.json()
+                print(f"BACnet write response JSON: {response_data}")
+                
+                # Check if the BACnet response indicates success
+                error_code = response_data.get('error', '0')
+                error_text = response_data.get('errorText', 'Unknown')
+                
+                print(f"BACnet error code: {error_code}")
+                print(f"BACnet error text: {error_text}")
+                
+                if error_code == '-1' or error_text == 'OK':
+                    print("SUCCESS: Setpoint written successfully")
+                    return jsonify({
+                        'success': True, 
+                        'setpoint': new_setpoint,
+                        'message': f'Setpoint successfully set to {new_setpoint}°F'
+                    })
+                else:
+                    error_msg = f'BACnet error: {error_text} (code: {error_code})'
+                    print(f"ERROR: {error_msg}")
+                    return jsonify({
+                        'success': False, 
+                        'error': error_msg
+                    }), 400
+            except Exception as json_error:
+                print(f"ERROR: Failed to parse BACnet response as JSON: {json_error}")
                 return jsonify({
                     'success': False, 
-                    'error': f'BACnet error: {error_text} (code: {error_code})'
+                    'error': f'Invalid response format: {response.text}'
                 }), 400
         else:
+            error_msg = f'HTTP {response.status_code}: {response.text}'
+            print(f"ERROR: {error_msg}")
             return jsonify({
                 'success': False, 
-                'error': f'HTTP {response.status_code}: {response.text}'
+                'error': error_msg
             }), response.status_code
             
     except ValueError as e:
-        return jsonify({'success': False, 'error': 'Invalid setpoint value'}), 400
+        error_msg = 'Invalid setpoint value'
+        print(f"ERROR: {error_msg} - {str(e)}")
+        return jsonify({'success': False, 'error': error_msg}), 400
     except Exception as e:
-        print(f"Error setting setpoint: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        error_msg = f"Unexpected error: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        print(f"Exception type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'error': error_msg}), 500
 
 @app.route('/api/trends')
 def get_trend_data():
