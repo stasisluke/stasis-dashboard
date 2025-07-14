@@ -745,6 +745,11 @@ def index():
                     btn.disabled = true;
                 }});
                 
+                // IMMEDIATELY update the display optimistically
+                document.getElementById('setpointValue').textContent = newSetpoint.toFixed(1) + '°F';
+                document.getElementById('setpointInput').value = newSetpoint.toFixed(1);
+                currentSetpoint = newSetpoint;
+                
                 showStatusMessage(`Setting temperature to ${{newSetpoint}}°F...`, 'success');
                 
                 console.log('Sending setpoint request:', {{ setpoint: newSetpoint, lockout: thermostatLockout }});
@@ -761,33 +766,37 @@ def index():
                 }});
                 
                 console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers);
                 
                 if (!response.ok) {{
+                    // If failed, revert the optimistic update
+                    fetchData();
                     throw new Error(`HTTP ${{response.status}}: ${{response.statusText}}`);
                 }}
                 
                 const result = await response.json();
                 console.log('Response data:', result);
                 
-                // Check if the result has the success property and it's true
                 if (result && result.success === true) {{
                     const message = result.message || `Temperature set to ${{newSetpoint}}°F successfully!`;
                     showStatusMessage(message, 'success');
-                    console.log('Success! Refreshing data in 1 second...');
+                    console.log('Success! Refreshing data in 500ms for confirmation...');
                     
-                    // Refresh data to show the change
+                    // Quick refresh to confirm the change took effect
                     setTimeout(() => {{
-                        console.log('Refreshing data...');
+                        console.log('Confirming setpoint change...');
                         fetchData();
-                    }}, 1000);
+                    }}, 500); // Reduced from 1000ms to 500ms
                 }} else {{
+                    // If failed, revert the optimistic update
+                    fetchData();
                     const errorMsg = result?.error || 'Unknown error occurred';
                     showStatusMessage(`Error: ${{errorMsg}}`, 'error');
                     console.error('Setpoint error:', result);
                 }}
                 
             }} catch (error) {{
+                // If failed, revert the optimistic update
+                fetchData();
                 console.error('Network error:', error);
                 showStatusMessage(`Network Error: ${{error.message}}`, 'error');
             }} finally {{
