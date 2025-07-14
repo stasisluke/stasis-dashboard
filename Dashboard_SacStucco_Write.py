@@ -1154,6 +1154,14 @@ def set_setpoint():
                 'error': f'Setpoint must be between 60°F and 85°F'
             }), 400
         
+        # Prepare the request body
+        request_body = {
+            "$base": "Real",
+            "value": str(new_setpoint)
+        }
+        print(f"Request body: {request_body}", flush=True)
+        app.logger.info(f"Body: {request_body}")
+        
         # Build the setpoint URL based on lockout mode
         lockout_mode = request_data.get('lockout', False)
         
