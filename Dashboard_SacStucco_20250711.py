@@ -587,23 +587,20 @@ def get_trend_data():
             if temp_value is None:
                 for item in log_datum.values():
                     if isinstance(item, dict) and "value" in item:
-                        try:
-                            temp_value = float(item["value"])
-                            break
-                        except (ValueError, TypeError):
-                            pass
+                        temp_value = item["value"]
+                        break
             
             if temp_value is None:
                 continue
             
-            # Convert to float if it's still a string
+            # Convert to float and validate - be very explicit about type conversion
             try:
-                temp_value = float(temp_value)
+                temp_float = float(str(temp_value))  # Convert to string first, then float
             except (ValueError, TypeError):
                 continue
             
             # Filter out erroneous temperature readings (reasonable HVAC range: 40-120°F)
-            if temp_value < 40 or temp_value > 120:
+            if temp_float < 40 or temp_float > 120:
                 continue
             
             # Parse timestamp
@@ -623,7 +620,7 @@ def get_trend_data():
             
             records.append({
                 "timestamp": timestamp_raw,
-                "temperature": float(temp_value),
+                "temperature": temp_float,
                 "formatted_time": formatted_time,
                 "sort_time": timestamp_dt
             })
