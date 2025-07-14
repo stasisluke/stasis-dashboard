@@ -314,10 +314,11 @@ def index():
             align-items: center;
             gap: 12px;
             cursor: pointer;
-            padding: 8px 12px;
+            padding: 12px 16px;
             border-radius: 6px;
             transition: all 0.2s ease;
             user-select: none;
+            width: 100%;
         }}
         .lockout-toggle:hover {{
             background: rgba(52, 152, 219, 0.1);
@@ -326,12 +327,14 @@ def index():
             width: 20px;
             height: 20px;
             cursor: pointer;
+            flex-shrink: 0;
         }}
         .lockout-label {{
             display: flex;
             flex-direction: column;
             gap: 2px;
             cursor: pointer;
+            flex: 1;
         }}
         .lockout-text {{
             font-size: 1em;
@@ -562,8 +565,8 @@ def index():
                     
                     <!-- Thermostat Lockout Toggle -->
                     <div class="lockout-controls">
-                        <div class="lockout-toggle" onclick="toggleThermostatLockout()">
-                            <input type="checkbox" id="lockoutCheckbox">
+                        <div class="lockout-toggle">
+                            <input type="checkbox" id="lockoutCheckbox" onchange="toggleThermostatLockout()">
                             <label for="lockoutCheckbox" class="lockout-label">
                                 <span class="lockout-text">Thermostat Lockout</span>
                                 <span class="lockout-description">ON: Blocks thermostat | OFF: Allows temporary overrides</span>
@@ -798,7 +801,14 @@ def index():
         
         // Thermostat Lockout Functions
         function toggleThermostatLockout() {{
-            thermostatLockout = !thermostatLockout;
+            const checkbox = document.getElementById('lockoutCheckbox');
+            
+            // Get the current state from the checkbox itself
+            thermostatLockout = checkbox.checked;
+            
+            console.log(`Thermostat lockout toggled to: ${{thermostatLockout}}`);
+            
+            // Update visual display
             updateLockoutDisplay();
             
             if (thermostatLockout) {{
@@ -806,15 +816,14 @@ def index():
             }} else {{
                 showStatusMessage('Thermostat UNLOCKED - Can temporarily override (until next admin change)', 'success');
             }}
-            
-            console.log(`Thermostat lockout: ${{thermostatLockout}}`);
         }}
         
         function updateLockoutDisplay() {{
             const checkbox = document.getElementById('lockoutCheckbox');
             const toggle = document.querySelector('.lockout-toggle');
             
-            checkbox.checked = thermostatLockout;
+            // Don't force checkbox state - let it follow user clicks
+            // checkbox.checked = thermostatLockout; // Remove this line
             
             if (thermostatLockout) {{
                 toggle.classList.add('active');
