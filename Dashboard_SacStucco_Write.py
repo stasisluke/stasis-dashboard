@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
+Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
@@ -474,6 +474,34 @@ def index():
             font-size: 0.9em;
         }}
         
+        /* Loading State Styles */
+        .loading-state {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 40px;
+            text-align: center;
+        }}
+        .loading-spinner {{
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e8e8e8;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }}
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+        .loading-text {{
+            font-size: 1.1em;
+            color: #7f8c8d;
+            font-weight: 500;
+        }}
+        
         /* Status message styles */
         .status-message {{
             padding: 12px;
@@ -554,7 +582,7 @@ def index():
                     </div>
                     
                     <!-- Setpoint Controls -->
-                    <div class="setpoint-controls">
+                    <div class="setpoint-controls" id="setpointControls" style="display: none;">
                         <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F">−</button>
                         <div class="setpoint-input-container">
                             <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)">
@@ -564,7 +592,7 @@ def index():
                     </div>
                     
                     <!-- Thermostat Lockout Toggle -->
-                    <div class="lockout-controls">
+                    <div class="lockout-controls" id="lockoutControls" style="display: none;">
                         <div class="lockout-toggle">
                             <input type="checkbox" id="lockoutCheckbox" onchange="toggleThermostatLockout()">
                             <label for="lockoutCheckbox" class="lockout-label">
@@ -578,10 +606,16 @@ def index():
                 </div>
             </div>
             
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-state">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading thermostat data...</div>
+            </div>
+            
             <!-- Status message area -->
             <div id="statusMessage" class="status-message"></div>
             
-            <div class="last-updated" id="lastUpdated">Never updated</div>
+            <div class="last-updated" id="lastUpdated">Initializing...</div>
         </div>
         
         <div class="card">
@@ -869,10 +903,26 @@ def index():
                 }}
                 
                 updateCurrentDisplay(data);
+                
+                // Hide loading state and show controls on first successful load
+                if (document.getElementById('loadingState').style.display !== 'none') {{
+                    hideLoadingState();
+                }}
+                
             }} catch (error) {{
                 console.error('Error fetching data:', error);
                 showStatusMessage('Failed to fetch data: ' + error.message, 'error');
+                // Still hide loading state even on error
+                if (document.getElementById('loadingState').style.display !== 'none') {{
+                    hideLoadingState();
+                }}
             }}
+        }}
+        
+        function hideLoadingState() {{
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('setpointControls').style.display = 'flex';
+            document.getElementById('lockoutControls').style.display = 'flex';
         }}
         
         function updateCurrentDisplay(data) {{
@@ -1029,9 +1079,14 @@ def index():
         
         // Initialize on page load
         window.onload = function() {{
+            console.log('Dashboard initializing...');
             initChart();
+            
+            // Start loading data immediately
             fetchData();
             loadTrendData('1h');
+            
+            console.log('Dashboard initialization complete');
         }};
     </script>
 </body>
