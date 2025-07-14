@@ -1144,7 +1144,7 @@ def set_setpoint():
         print(f"New setpoint: {new_setpoint}", flush=True)
         app.logger.info(f"New setpoint: {new_setpoint}")
         
-        # For now, let's use simple static limits to isolate the issue
+        # Validate setpoint range
         if new_setpoint < 60 or new_setpoint > 85:
             error_msg = f"Setpoint {new_setpoint} out of range"
             print(f"ERROR: {error_msg}", flush=True)
