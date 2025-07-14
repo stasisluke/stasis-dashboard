@@ -782,8 +782,8 @@ def index():
                         backgroundColor: 'rgba(52, 152, 219, 0.08)',
                         tension: 0.4,
                         fill: true,
-                        pointRadius: 1,
-                        pointHoverRadius: 6,
+                        pointRadius: 2, // Will be dynamically updated
+                        pointHoverRadius: 6, // Will be dynamically updated
                         pointBackgroundColor: '#3498db',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
