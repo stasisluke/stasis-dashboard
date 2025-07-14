@@ -4,6 +4,7 @@ Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
+import sys
 from flask import Flask, request, jsonify
 import requests
 import base64
@@ -11,6 +12,9 @@ import os
 from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
+
+# Force stdout to flush immediately
+sys.stdout.reconfigure(line_buffering=True)
 
 # ========================================
 # CONFIGURATION SECTION - EDIT HERE FOR DIFFERENT CLIENTS/CONTROLLERS
@@ -1017,43 +1021,52 @@ def get_thermostat_data():
 @app.route('/api/setpoint', methods=['POST'])
 def set_setpoint():
     """API endpoint to write new setpoint to AV1"""
-    print(f"\n=== SETPOINT REQUEST START ===")
+    print(f"\n=== SETPOINT REQUEST START ===", flush=True)
+    app.logger.info("=== SETPOINT REQUEST START ===")
     
     try:
         # Get the new setpoint from request
         request_data = request.get_json()
-        print(f"Request data received: {request_data}")
+        print(f"Request data received: {request_data}", flush=True)
+        app.logger.info(f"Request data: {request_data}")
         
         if not request_data or 'setpoint' not in request_data:
-            print("ERROR: Missing setpoint value in request")
+            error_msg = "Missing setpoint value in request"
+            print(f"ERROR: {error_msg}", flush=True)
+            app.logger.error(error_msg)
             return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
         
         new_setpoint = float(request_data['setpoint'])
-        print(f"New setpoint: {new_setpoint}")
+        print(f"New setpoint: {new_setpoint}", flush=True)
+        app.logger.info(f"New setpoint: {new_setpoint}")
         
         # For now, let's use simple static limits to isolate the issue
-        # We'll add the dynamic limits back once this works
         if new_setpoint < 60 or new_setpoint > 85:
-            print(f"ERROR: Setpoint {new_setpoint} out of range")
+            error_msg = f"Setpoint {new_setpoint} out of range"
+            print(f"ERROR: {error_msg}", flush=True)
+            app.logger.error(error_msg)
             return jsonify({
                 'success': False, 
                 'error': f'Setpoint must be between 60°F and 85°F'
             }), 400
         
-        # Build the setpoint URL
-        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
-        print(f"Setpoint URL: {setpoint_url}")
+        # Build the setpoint URL with priority parameter
+        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=16&alt=json"
+        print(f"Setpoint URL: {setpoint_url}", flush=True)
+        app.logger.info(f"URL: {setpoint_url}")
         
         # Prepare the request body
         request_body = {
             "$base": "Real",
             "value": str(new_setpoint)
         }
-        print(f"Request body: {request_body}")
-        print(f"Auth header (partial): Authorization exists: {'Authorization' in auth_header}")
+        print(f"Request body: {request_body}", flush=True)
+        app.logger.info(f"Body: {request_body}")
         
         # Make the PUT request
-        print("Making PUT request to BACnet API...")
+        print("Making PUT request to BACnet API...", flush=True)
+        app.logger.info("Making PUT request to BACnet API...")
+        
         response = requests.put(
             setpoint_url, 
             headers=auth_header, 
@@ -1061,17 +1074,22 @@ def set_setpoint():
             timeout=15
         )
         
-        print(f"PUT response status: {response.status_code}")
-        print(f"PUT response text: {response.text}")
+        print(f"PUT response status: {response.status_code}", flush=True)
+        print(f"PUT response text: {response.text}", flush=True)
+        app.logger.info(f"PUT response: {response.status_code} - {response.text}")
         
         if response.ok:
             try:
                 response_data = response.json()
-                print(f"PUT response JSON: {response_data}")
+                print(f"PUT response JSON: {response_data}", flush=True)
+                app.logger.info(f"Response JSON: {response_data}")
                 
                 # Check BACnet response
                 error_code = response_data.get('error', '0')
                 error_text = response_data.get('errorText', 'Unknown')
+                
+                print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
+                app.logger.info(f"BACnet error: {error_code} - {error_text}")
                 
                 if error_code == '-1' or error_text == 'OK':
                     result = {
@@ -1079,14 +1097,16 @@ def set_setpoint():
                         'setpoint': new_setpoint,
                         'message': f'Setpoint set to {new_setpoint}°F'
                     }
-                    print(f"SUCCESS: Returning {result}")
+                    print(f"SUCCESS: Returning {result}", flush=True)
+                    app.logger.info(f"SUCCESS: {result}")
                     return jsonify(result)
                 else:
                     result = {
                         'success': False, 
                         'error': f'BACnet error: {error_text} (code: {error_code})'
                     }
-                    print(f"BACNET ERROR: Returning {result}")
+                    print(f"BACNET ERROR: Returning {result}", flush=True)
+                    app.logger.warning(f"BACnet error: {result}")
                     return jsonify(result), 400
                     
             except Exception as json_error:
@@ -1094,15 +1114,16 @@ def set_setpoint():
                     'success': False, 
                     'error': f'Could not parse response: {str(json_error)}'
                 }
-                print(f"JSON PARSE ERROR: {json_error}")
-                print(f"Returning {result}")
+                print(f"JSON PARSE ERROR: {json_error}", flush=True)
+                app.logger.error(f"JSON parse error: {json_error}")
                 return jsonify(result), 500
         else:
             result = {
                 'success': False, 
                 'error': f'HTTP {response.status_code}: {response.text}'
             }
-            print(f"HTTP ERROR: Returning {result}")
+            print(f"HTTP ERROR: Returning {result}", flush=True)
+            app.logger.error(f"HTTP error: {result}")
             return jsonify(result), response.status_code
             
     except Exception as e:
@@ -1110,16 +1131,16 @@ def set_setpoint():
             'success': False, 
             'error': f'Server error: {str(e)}'
         }
-        print(f"EXCEPTION: {e}")
-        print(f"Exception type: {type(e)}")
+        print(f"EXCEPTION: {e}", flush=True)
+        app.logger.error(f"Exception: {e}")
         import traceback
-        print(f"Full traceback:")
+        print(f"Full traceback:", flush=True)
         traceback.print_exc()
-        print(f"Returning error result: {result}")
         return jsonify(result), 500
     
     finally:
-        print("=== SETPOINT REQUEST END ===\n")
+        print("=== SETPOINT REQUEST END ===\n", flush=True)
+        app.logger.info("=== SETPOINT REQUEST END ===")
 
 @app.route('/api/trends')
 def get_trend_data():
