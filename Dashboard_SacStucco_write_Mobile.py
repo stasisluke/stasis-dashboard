@@ -223,7 +223,7 @@ def index():
             color: #2c3e50;
         }}
         
-        /* Setpoint Control Styles */
+        /* Setpoint Control Styles - Desktop Layout */
         .setpoint-controls {{
             display: flex;
             align-items: center;
@@ -250,6 +250,10 @@ def index():
             justify-content: center;
             transition: all 0.2s ease;
             user-select: none;
+            order: 0; /* Default order for desktop */
+        }}
+        .setpoint-btn.plus {{
+            order: 2; /* Plus button on the right on desktop */
         }}
         .setpoint-btn:hover {{
             background: #3498db;
@@ -269,6 +273,7 @@ def index():
             flex-direction: column;
             align-items: center;
             gap: 8px;
+            order: 1; /* Input in the middle */
         }}
         .setpoint-input {{
             width: 80px;
@@ -560,6 +565,8 @@ def index():
             .temperature-value {{
                 font-size: 3.5em;
             }}
+            
+            /* Mobile Setpoint Controls - Vertical Layout with Reversed Order */
             .setpoint-controls {{
                 flex-direction: column;
                 gap: 16px;
@@ -569,12 +576,24 @@ def index():
                 width: 50px;
                 height: 50px;
                 font-size: 1.8em;
+                order: 0; /* Reset order for mobile */
+            }}
+            .setpoint-btn.plus {{
+                order: 0; /* Plus button on TOP for mobile (first/top position) */
+            }}
+            .setpoint-btn.minus {{
+                order: 2; /* Minus button on BOTTOM for mobile (last/bottom position) */
+            }}
+            .setpoint-input-container {{
+                width: 100%;
+                order: 1; /* Input stays in middle */
             }}
             .setpoint-input {{
                 width: 100px;
                 font-size: 1.4em;
                 padding: 12px;
             }}
+            
             .lockout-controls {{
                 padding: 12px;
             }}
@@ -675,14 +694,14 @@ def index():
                         <div class="setpoint-value" id="setpointValue">--°F</div>
                     </div>
                     
-                    <!-- Setpoint Controls -->
+                    <!-- Setpoint Controls with improved mobile layout -->
                     <div class="setpoint-controls" id="setpointControls" style="display: none;">
-                        <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F">−</button>
+                        <button class="setpoint-btn minus" onclick="adjustSetpoint(-1)" title="Decrease by 1°F">−</button>
                         <div class="setpoint-input-container">
                             <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)">
                             <button class="setpoint-set-btn" onclick="setCustomSetpoint()">Set</button>
                         </div>
-                        <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F">+</button>
+                        <button class="setpoint-btn plus" onclick="adjustSetpoint(1)" title="Increase by 1°F">+</button>
                     </div>
                     
                     <!-- Thermostat Lockout Toggle -->
@@ -1615,5 +1634,6 @@ if __name__ == '__main__':
     print(f"- Dynamic safety limits from AV{SETPOINT_MAX_AV} (max) and AV{SETPOINT_MIN_AV} (min)")
     print(f"- Thermostat Lockout toggle for admin control")
     print(f"- Real-time feedback and status messages")
+    print(f"- MOBILE LAYOUT FIXED: + button on top, - button on bottom for better UX")
     
     app.run(host='0.0.0.0', port=8000, debug=True)
