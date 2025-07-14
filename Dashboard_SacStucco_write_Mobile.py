@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+.setpoint-input-container {{
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                margin: 0 8px; /* Add some spacing on mobile */
+            }}#!/usr/bin/env python3
 """
 Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
@@ -561,9 +567,11 @@ def index():
                 font-size: 3.5em;
             }}
             .setpoint-controls {{
-                flex-direction: column;
+                flex-direction: row; /* Keep horizontal layout */
                 gap: 16px;
                 padding: 12px;
+                justify-content: center;
+                align-items: center;
             }}
             .setpoint-btn {{
                 width: 50px;
