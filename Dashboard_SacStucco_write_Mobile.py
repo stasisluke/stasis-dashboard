@@ -1014,8 +1014,15 @@ def index():
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
             const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
             
-            document.getElementById('currentTemp').textContent = tempValue;
-            document.getElementById('setpointValue').textContent = setpointValue + '°F';
+            const currentTempEl = document.getElementById('currentTemp');
+            const setpointValueEl = document.getElementById('setpointValue');
+            
+            if (currentTempEl) {{
+                currentTempEl.textContent = tempValue;
+            }}
+            if (setpointValueEl) {{
+                setpointValueEl.textContent = setpointValue + '°F';
+            }}
             
             // Update current setpoint for controls
             currentSetpoint = data.setpoint;
@@ -1026,46 +1033,59 @@ def index():
                 
                 // Update input field constraints
                 const input = document.getElementById('setpointInput');
-                input.min = setpointLimits.min;
-                input.max = setpointLimits.max;
+                if (input) {{
+                    input.min = setpointLimits.min;
+                    input.max = setpointLimits.max;
+                }}
             }}
             
             // Update the input field with current setpoint
             if (data.setpoint) {{
-                document.getElementById('setpointInput').value = data.setpoint.toFixed(1);
+                const input = document.getElementById('setpointInput');
+                if (input) {{
+                    input.value = data.setpoint.toFixed(1);
+                }}
             }}
             
             // Determine mode and styling
             const circle = document.getElementById('tempCircle');
             const statusDisplay = document.getElementById('temperatureStatus');
             
-            // Clear all mode classes
-            circle.className = 'temperature-circle';
-            
-            if (data.peak_savings) {{
-                circle.classList.add('peak-savings');
-                statusDisplay.textContent = 'Peak Savings';
-            }} else if (data.system_mode === 'Cooling') {{
-                circle.classList.add('cooling');
-                statusDisplay.textContent = 'Cooling';
-            }} else if (data.system_mode === 'Heating') {{
-                circle.classList.add('heating');
-                statusDisplay.textContent = 'Heating';
-            }} else {{
-                circle.classList.add('deadband');
-                statusDisplay.textContent = 'Standby';
+            if (circle) {{
+                // Clear all mode classes
+                circle.className = 'temperature-circle';
+                
+                if (data.peak_savings) {{
+                    circle.classList.add('peak-savings');
+                    if (statusDisplay) statusDisplay.textContent = 'Peak Savings';
+                }} else if (data.system_mode === 'Cooling') {{
+                    circle.classList.add('cooling');
+                    if (statusDisplay) statusDisplay.textContent = 'Cooling';
+                }} else if (data.system_mode === 'Heating') {{
+                    circle.classList.add('heating');
+                    if (statusDisplay) statusDisplay.textContent = 'Heating';
+                }} else {{
+                    circle.classList.add('deadband');
+                    if (statusDisplay) statusDisplay.textContent = 'Standby';
+                }}
             }}
             
             // Update device title
-            if ('{DISPLAY_DEVICE_NAME}') {{
-                document.getElementById('deviceTitle').textContent = '{DISPLAY_DEVICE_NAME}';
-            }} else if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
-                document.getElementById('deviceTitle').textContent = data.device_name;
-            }} else {{
-                document.getElementById('deviceTitle').textContent = `Device {DEVICE}`;
+            const deviceTitle = document.getElementById('deviceTitle');
+            if (deviceTitle) {{
+                if ('{DISPLAY_DEVICE_NAME}') {{
+                    deviceTitle.textContent = '{DISPLAY_DEVICE_NAME}';
+                }} else if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
+                    deviceTitle.textContent = data.device_name;
+                }} else {{
+                    deviceTitle.textContent = `Device {DEVICE}`;
+                }}
             }}
             
-            document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            const lastUpdated = document.getElementById('lastUpdated');
+            if (lastUpdated) {{
+                lastUpdated.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            }}
         }}
         
         // Load trend data for chart
