@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Integrated Web Server for Thermostat Dashboard with Trend Log Support
-Serves the HTML file and provides API endpoints that work just like your existing Python code
-Now includes trend log data for historical charting
+Simplified Thermostat Dashboard with Trend Log Support
+Serves the HTML file and provides API endpoints for thermostat data
 """
 
 from flask import Flask, request, jsonify
@@ -40,59 +39,11 @@ TEMP_TREND_LOG_INSTANCE = 27     # Trend Log instance for temperature history
 # END CONFIGURATION SECTION
 # ========================================
 
-# Basic auth header (exactly like your Python code)
+# Basic auth header
 auth_header = {
     "Authorization": f"Basic {base64.b64encode(f'{USER}:{PASSWORD}'.encode()).decode()}",
     "Accept": "application/json"
 }
-
-# ------------------------------------------------------------
-# Helper: follow EnteliWeb pagination automatically
-# ------------------------------------------------------------
-
-def fetch_enteli_pages(base_url: str, params: dict):
-    """Yield every page of a log‑buffer, automatically following next links."""
-    url = base_url
-    first = True
-    page_count = 0
-    
-    # Prepare params for first and subsequent requests
-    params_first = params.copy()  # alt=json, max-results=…
-    params_next = {"alt": "json"}  # only alt=json
-    
-    while url and page_count < 50:  # Safety limit
-        print(f"DEBUG: Fetching page {page_count + 1}: {url[:100]}...")
-        
-        resp = requests.get(
-            url,
-            params=params_first if first else params_next,
-            headers=auth_header,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        
-        # Check content type to make sure we got JSON
-        if "application/json" not in resp.headers.get("Content-Type", ""):
-            print(f"ERROR: Page {page_count + 1} returned {resp.headers.get('Content-Type')}")
-            print(f"Response text: {resp.text[:200]}")
-            break
-            
-        page = resp.json()
-        
-        # Count actual data records (skip $base and next)
-        data_keys = [k for k in page.keys() if k not in ('$base', 'next')]
-        print(f"DEBUG: Page {page_count + 1} has {len(data_keys)} data records")
-        
-        yield page
-        
-        # Get next URL
-        url = page.get("next")
-        print(f"DEBUG: Next URL exists: {bool(url)}")
-        
-        first = False
-        page_count += 1
-        
-    print(f"DEBUG: Pagination complete after {page_count} pages")
 
 @app.route('/')
 def index():
@@ -204,10 +155,6 @@ def index():
         .mode-text.heating {{ color: #FF9800; }}
         .mode-text.peak-savings {{ color: #4CAF50; }}
         .mode-text.deadband {{ color: #9E9E9E; }}
-        .status-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }}
-        .status-item {{ text-align: center; padding: 15px; background: rgba(0, 0, 0, 0.05); border-radius: 10px; }}
-        .status-value {{ font-size: 1.5em; font-weight: bold; color: #2196F3; }}
-        .status-label {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
         .chart-container {{ position: relative; height: 300px; margin-top: 20px; }}
         .chart-controls {{
             display: flex;
@@ -272,7 +219,6 @@ def index():
                 <button class="time-range-btn" onclick="loadTrendData('4h')">Last 4 Hours</button>
                 <button class="time-range-btn" onclick="loadTrendData('12h')">Last 12 Hours</button>
                 <button class="time-range-btn" onclick="loadTrendData('24h')">Last 24 Hours</button>
-                <button class="time-range-btn" onclick="loadTrendData('7d')">Last 7 Days</button>
             </div>
             <div class="chart-container">
                 <canvas id="temperatureChart"></canvas>
@@ -348,7 +294,7 @@ def index():
             }});
         }}
         
-        // Fetch current thermostat data (keeping all original functionality)
+        // Fetch current thermostat data
         async function fetchData() {{
             try {{
                 const response = await fetch('/api/thermostat');
@@ -366,7 +312,6 @@ def index():
             }}
         }}
         
-        // Keep the exact same display update logic as original
         function updateCurrentDisplay(data) {{
             // Update temperature circle
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
@@ -401,39 +346,34 @@ def index():
                 modeText.textContent = 'Standby';
             }}
             
-            // Update device title - use custom display name or actual device name
+            // Update device title
             if ('{DISPLAY_DEVICE_NAME}') {{
-                // Use the custom display name from configuration
                 document.getElementById('deviceTitle').textContent = '{DISPLAY_DEVICE_NAME}';
             }} else if (data.device_name && data.device_name !== 'Device {DEVICE}') {{
-                // Use actual device name from BACnet if no custom name set
                 document.getElementById('deviceTitle').textContent = data.device_name;
             }} else {{
-                // Fallback to Device + number
                 document.getElementById('deviceTitle').textContent = `Device {DEVICE}`;
             }}
             
             document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
         }}
         
-        // NEW: Load trend data for chart
+        // Load trend data for chart
         async function loadTrendData(timeRange) {{
             try {{
                 document.getElementById('chartStatus').textContent = 'Loading trend data...';
                 document.getElementById('chartStatus').className = 'loading';
                 
-                // Update active button - more precise matching
+                // Update active button
                 document.querySelectorAll('.time-range-btn').forEach(btn => {{
                     btn.classList.remove('active');
                 }});
                 
-                // Find and activate the correct button based on timeRange
                 const buttonMap = {{
                     '1h': 'Last Hour',
                     '4h': 'Last 4 Hours', 
                     '12h': 'Last 12 Hours',
-                    '24h': 'Last 24 Hours',
-                    '7d': 'Last 7 Days'
+                    '24h': 'Last 24 Hours'
                 }};
                 
                 document.querySelectorAll('.time-range-btn').forEach(btn => {{
@@ -454,7 +394,7 @@ def index():
                 }}
                 
                 updateChart(data);
-                document.getElementById('chartStatus').textContent = `Loaded ${{data.records.length}} data points for ${{data.actual_range}}`;
+                document.getElementById('chartStatus').textContent = `Loaded ${{data.records.length}} data points`;
                 document.getElementById('chartStatus').className = 'last-updated';
                 
             }} catch (error) {{
@@ -464,7 +404,7 @@ def index():
             }}
         }}
         
-        // NEW: Update chart with trend data
+        // Update chart with trend data
         function updateChart(trendData) {{
             if (!trendData.records || trendData.records.length === 0) {{
                 chart.data.labels = [];
@@ -486,16 +426,16 @@ def index():
             chart.update();
         }}
         
-        // NEW: Refresh chart with current time range
+        // Refresh chart with current time range
         function refreshChart() {{
             loadTrendData(currentTimeRange);
         }}
         
-        // Toggle auto-refresh for current data (keeping original functionality)
+        // Toggle auto-refresh for current data
         function toggleAutoRefresh() {{
             autoRefresh = !autoRefresh;
             if (autoRefresh) {{
-                refreshInterval = setInterval(fetchData, 5000); // Original 5 second interval
+                refreshInterval = setInterval(fetchData, 5000);
                 alert('Auto-refresh enabled (every 5 seconds)');
             }} else {{
                 clearInterval(refreshInterval);
@@ -506,8 +446,8 @@ def index():
         // Initialize on page load
         window.onload = function() {{
             initChart();
-            fetchData(); // Get current data (original function)
-            loadTrendData('1h'); // Load initial trend data for chart
+            fetchData();
+            loadTrendData('1h');
         }};
     </script>
 </body>
@@ -515,10 +455,7 @@ def index():
 
 @app.route('/api/thermostat')
 def get_thermostat_data():
-    """
-    API endpoint that mimics your Python code functionality
-    Returns current thermostat data from EnteliWeb
-    """
+    """API endpoint for current thermostat data"""
     try:
         data = {}
         
@@ -543,23 +480,18 @@ def get_thermostat_data():
             mode_data = response.json()
             mode_value = mode_data.get('value', '3')
             
-            # Convert string to integer
             try:
                 mode_number = int(mode_value)
             except:
                 mode_number = 3
             
-            # Map numeric values to text
             mode_map = {
                 1: 'Heating',
                 2: 'Cooling', 
                 3: 'Deadband'
             }
             
-            mode_text = mode_map.get(mode_number, 'Deadband')
-            data['system_mode'] = mode_text
-            
-            # Set heating and cooling based on mode
+            data['system_mode'] = mode_map.get(mode_number, 'Deadband')
             data['heating'] = mode_number == 1
             data['cooling'] = mode_number == 2
         else:
@@ -571,7 +503,7 @@ def get_thermostat_data():
         if response.ok:
             peak_data = response.json()
             peak_value = peak_data.get('value')
-            data['peak_savings'] = peak_value == 'active' or peak_value == 'Active' or peak_value == 'On' or peak_value == True or peak_value == 1
+            data['peak_savings'] = peak_value in ['active', 'Active', 'On', True, 1]
         
         # Fetch fan status
         fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
@@ -579,23 +511,17 @@ def get_thermostat_data():
         if response.ok:
             fan_data = response.json()
             fan_value = fan_data.get('value')
-            data['fan'] = fan_value == 'active' or fan_value == 'Active' or fan_value == 'On' or fan_value == True or fan_value == 1
+            data['fan'] = fan_value in ['active', 'Active', 'On', True, 1]
         
-        # Fetch device name from DEV object
+        # Fetch device name
         device_name_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/object-name?alt=json"
         response = requests.get(device_name_url, headers=auth_header, timeout=10)
         if response.ok:
             device_name_data = response.json()
             data['device_name'] = device_name_data.get('value', f'Device {DEVICE}')
         else:
-            # Try device-name property as backup
-            device_name_url2 = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/device,{DEVICE}/device-name?alt=json"
-            response2 = requests.get(device_name_url2, headers=auth_header, timeout=10)
-            if response2.ok:
-                device_name_data2 = response2.json()
-                data['device_name'] = device_name_data2.get('value', f'Device {DEVICE}')
-            else:
-                data['device_name'] = f'Device {DEVICE}'
+            data['device_name'] = f'Device {DEVICE}'
+            
         return jsonify(data)
         
     except Exception as e:
@@ -603,226 +529,119 @@ def get_thermostat_data():
 
 @app.route('/api/trends')
 def get_trend_data():
+    """API endpoint for trend log data"""
     try:
         time_range = request.args.get('range', '1h')
-        debug_info = []
-
-        # ----- build start / end -----
+        
+        # Set time ranges and max results
         now = datetime.utcnow().replace(tzinfo=timezone.utc)
         if time_range == '1h':
-            start_time, max_results = now - timedelta(hours=1), 20
+            start_time = now - timedelta(hours=1)
+            max_results = 60
         elif time_range == '4h':
-            start_time, max_results = now - timedelta(hours=4), 60
+            start_time = now - timedelta(hours=4)
+            max_results = 120
         elif time_range == '12h':
-            start_time, max_results = now - timedelta(hours=12), 150
+            start_time = now - timedelta(hours=12)
+            max_results = 300
         elif time_range == '24h':
-            start_time, max_results = now - timedelta(hours=24), 300
-        elif time_range == '7d':
-            start_time, max_results = now - timedelta(days=7), 50000
+            start_time = now - timedelta(hours=24)
+            max_results = 500
         else:
-            start_time, max_results = now - timedelta(hours=1), 20
+            start_time = now - timedelta(hours=1)
+            max_results = 60
 
-        base_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
-
+        # Build URL for trend log
+        url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
+        
         params = {
             "alt": "json",
             "max-results": max_results,
+            "published-ge": start_time.isoformat(timespec='seconds') + "Z",
+            "published-le": now.isoformat(timespec='seconds') + "Z"
         }
-        if time_range != '7d':  # we want *everything* for 7d, so skip the published-ge/le filters
-            params["published-ge"] = start_time.isoformat(timespec='seconds') + "Z"
-            params["published-le"] = now.isoformat(timespec='seconds') + "Z"
-            debug_info.append(f"Requesting {time_range} from {params['published-ge']} to {params['published-le']}")
-        else:
-            debug_info.append("7d: requesting ALL pages (no published filters)")
-
-        # Use pagination to fetch all pages
-        rows = []
-        for page in fetch_enteli_pages(base_url, params):
-            for key, v in page.items():
-                if key in ('$base', 'next') or not isinstance(v, dict) or "timestamp" not in v:
-                    continue
-                    
-                ld = v.get("logDatum", {})
+        
+        # Fetch trend data (single request only)
+        response = requests.get(url, params=params, headers=auth_header, timeout=30)
+        response.raise_for_status()
+        
+        trend_data = response.json()
+        records = []
+        
+        # Process the trend data
+        for key, value in trend_data.items():
+            if key in ('$base', 'next') or not isinstance(value, dict) or "timestamp" not in value:
+                continue
                 
-                # ---- skip status‑only rows (no real‑value) ----
-                if any(k in ld for k in ("log-status", "event-state", "string-value")):
-                    debug_info.append(f"SKIP {key}: status row → {list(ld.keys())}")
-                    continue
-
-                # extract numeric value
-                val = None
-                if "real-value" in ld and isinstance(ld["real-value"], dict):
-                    val = ld["real-value"].get("value")
-                if val is None:
-                    for w in ld.values():
-                        if isinstance(w, dict) and "value" in w:
-                            try:
-                                val = float(w["value"])
-                                break
-                            except (ValueError, TypeError):
-                                pass
-                if val is None:
-                    debug_info.append(f"SKIP {key}: no numeric value")
-                    continue
-
-                ts_raw = v["timestamp"]["value"]
-                # Simple timestamp parsing
-                if ts_raw.endswith('Z'):
-                    ts_dt = datetime.fromisoformat(ts_raw[:-1]).replace(tzinfo=timezone.utc)
-                else:
-                    ts_dt = datetime.fromisoformat(ts_raw.replace('Z', '+00:00'))
-
-                # labels by range
-                if time_range in ("1h", "4h"):
-                    label = ts_dt.strftime('%H:%M')
-                elif time_range in ("12h", "24h"):
-                    label = ts_dt.strftime('%m/%d %H:%M')
-                else:
-                    label = ts_dt.strftime('%m/%d')
-
-                rows.append({
-                    "timestamp": ts_raw,
-                    "temperature": float(val),
-                    "formatted_time": label,
-                    "sort_time": ts_dt,
-                })
-
-        rows.sort(key=lambda x: x['sort_time'])
-
-        # down‑sample 7d if necessary
-        if time_range == '7d' and len(rows) > 300:
-            step = len(rows)//300
-            rows = rows[::step]
-
-        for r in rows:
-            r.pop('sort_time', None)
-
+            log_datum = value.get("logDatum", {})
+            
+            # Skip status-only records
+            if any(k in log_datum for k in ("log-status", "event-state", "string-value")):
+                continue
+            
+            # Extract temperature value
+            temp_value = None
+            if "real-value" in log_datum and isinstance(log_datum["real-value"], dict):
+                temp_value = log_datum["real-value"].get("value")
+            
+            if temp_value is None:
+                for item in log_datum.values():
+                    if isinstance(item, dict) and "value" in item:
+                        try:
+                            temp_value = float(item["value"])
+                            break
+                        except (ValueError, TypeError):
+                            pass
+            
+            if temp_value is None:
+                continue
+            
+            # Parse timestamp
+            timestamp_raw = value["timestamp"]["value"]
+            if timestamp_raw.endswith('Z'):
+                timestamp_dt = datetime.fromisoformat(timestamp_raw[:-1]).replace(tzinfo=timezone.utc)
+            else:
+                timestamp_dt = datetime.fromisoformat(timestamp_raw.replace('Z', '+00:00'))
+            
+            # Format time label based on range
+            if time_range in ("1h", "4h"):
+                formatted_time = timestamp_dt.strftime('%H:%M')
+            elif time_range in ("12h", "24h"):
+                formatted_time = timestamp_dt.strftime('%m/%d %H:%M')
+            else:
+                formatted_time = timestamp_dt.strftime('%m/%d')
+            
+            records.append({
+                "timestamp": timestamp_raw,
+                "temperature": float(temp_value),
+                "formatted_time": formatted_time,
+                "sort_time": timestamp_dt
+            })
+        
+        # Sort by timestamp
+        records.sort(key=lambda x: x['sort_time'])
+        
+        # Remove sort_time field
+        for record in records:
+            record.pop('sort_time', None)
+        
         result = {
-            "records": rows,
+            "records": records,
             "time_range": time_range,
-            "actual_range": f"{len(rows)} points" if rows else "No data",
-            "start_time": start_time.isoformat() + "Z",
-            "end_time": now.isoformat() + "Z",
-            "total_records": len(rows),
-            "debug_info": debug_info,
+            "total_records": len(records)
         }
+        
         return jsonify(result)
-
-    except Exception as exc:
-        return jsonify({
-            "error": str(exc),
-            "records": [],
-            "total_records": 0,
-            "actual_range": "Error",
-            "debug_info": [f"Error: {exc}"],
-        })
-
-@app.route('/test-pagination')
-def test_pagination():
-    url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer"
-    params = {"alt": "json", "max-results": 5}
-    
-    results = []
-    page_num = 0
-    
-    while url and page_num < 3:  # Just test 3 pages
-        page_num += 1
-        try:
-            resp = requests.get(url, params=params if page_num == 1 else {"alt": "json"}, headers=auth_header, timeout=30)
-            results.append(f"Page {page_num}: HTTP {resp.status_code}")
-            
-            if resp.status_code != 200:
-                results.append(f"Error: {resp.text[:200]}")
-                break
-                
-            data = resp.json()
-            record_count = len([k for k in data.keys() if k not in ('$base', 'next')])
-            results.append(f"Page {page_num}: {record_count} records")
-            
-            url = data.get('next')
-            results.append(f"Next URL exists: {url is not None}")
-            
-            if not url:
-                results.append("No more pages")
-                break
-                
-        except requests.exceptions.JSONDecodeError as e:
-            results.append(f"Page {page_num}: JSON decode error")
-            results.append(f"Response text: {resp.text[:200]}")
-            break
-        except Exception as e:
-            results.append(f"Page {page_num}: Error - {str(e)}")
-            break
-    
-    return {"results": results}
-
-@app.route('/api/debug')
-def debug_values():
-    """Debug endpoint to see raw values from BACnet objects"""
-    try:
-        debug_data = {}
-        
-        # Debug system mode
-        mv_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/present-value?alt=json"
-        response = requests.get(mv_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['system_mode_present_value'] = response.json()
-        
-        # Try to get state text for system mode
-        mv_text_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/multi-state-value,{SYSTEM_MODE_MV}/state-text?alt=json"
-        response = requests.get(mv_text_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['system_mode_state_text'] = response.json()
-        
-        # Debug fan status
-        fan_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/binary-output,{FAN_STATUS_BO}/present-value?alt=json"
-        response = requests.get(fan_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['fan_status_present_value'] = response.json()
-        
-        # Debug trend log info
-        trend_info_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/object-name?alt=json"
-        response = requests.get(trend_info_url, headers=auth_header, timeout=10)
-        if response.ok:
-            debug_data['trend_log_name'] = response.json()
-        else:
-            debug_data['trend_log_name_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
-        
-        # Test trend log with no time filter (get last 10 records)
-        trend_test_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/trend-log,{TEMP_TREND_LOG_INSTANCE}/log-buffer?max-results=10&alt=json"
-        response = requests.get(trend_test_url, headers=auth_header, timeout=10)
-        if response.ok:
-            trend_test_data = response.json()
-            debug_data['trend_log_test'] = {
-                'total_keys': len(trend_test_data),
-                'sample_keys': list(trend_test_data.keys())[:10],
-                'sample_records': []
-            }
-            # Get a few sample records with timestamps
-            count = 0
-            for key, value in trend_test_data.items():
-                if key != '$base' and count < 3:
-                    if isinstance(value, dict) and 'timestamp' in value:
-                        debug_data['trend_log_test']['sample_records'].append({
-                            'key': key,
-                            'timestamp': value.get('timestamp', {}),
-                            'logDatum': value.get('logDatum', {})
-                        })
-                        count += 1
-        else:
-            debug_data['trend_log_test_error'] = f"HTTP {response.status_code}: {response.text[:200]}"
-        
-        # Add current time for comparison
-        debug_data['current_server_time'] = datetime.now().isoformat()
-        debug_data['current_utc_time'] = datetime.utcnow().isoformat()
-        
-        return jsonify(debug_data)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            "error": str(e),
+            "records": [],
+            "total_records": 0
+        })
 
 if __name__ == '__main__':
-    print(f"Starting Enhanced Thermostat Dashboard Server...")
+    print(f"Starting Thermostat Dashboard Server...")
     print(f"EnteliWeb Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
@@ -830,7 +649,6 @@ if __name__ == '__main__':
     print(f"Dashboard URL: http://localhost:8000")
     print(f"API Test: http://localhost:8000/api/thermostat")
     print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
-    print(f"Debug API: http://localhost:8000/api/debug")
-    print("\nMake sure to update the PASSWORD variable and TEMP_TREND_LOG_INSTANCE!")
+    print("\nMake sure to update the PASSWORD variable!")
     
     app.run(host='0.0.0.0', port=8000, debug=True)
