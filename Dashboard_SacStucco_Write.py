@@ -563,7 +563,7 @@ def index():
                     <!-- Thermostat Lockout Toggle -->
                     <div class="lockout-controls">
                         <div class="lockout-toggle" onclick="toggleThermostatLockout()">
-                            <input type="checkbox" id="lockoutCheckbox" disabled>
+                            <input type="checkbox" id="lockoutCheckbox">
                             <label for="lockoutCheckbox" class="lockout-label">
                                 <span class="lockout-text">Thermostat Lockout</span>
                                 <span class="lockout-description">ON: Blocks thermostat | OFF: Allows temporary overrides</span>
