@@ -574,11 +574,14 @@ def index():
             .lockout-controls {{
                 padding: 12px;
             }}
+            .lockout-section {{
+                padding: 12px;
+            }}
             .lockout-toggle {{
                 padding: 16px 12px;
             }}
-            .lockout-text {{
-                font-size: 1.1em;
+            .lockout-toggle-simple {{
+                font-size: 1em;
             }}
             .chart-container {{
                 height: 280px;
