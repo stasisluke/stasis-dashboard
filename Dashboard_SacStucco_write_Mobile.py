@@ -177,6 +177,40 @@ def index():
             border-color: #bdc3c7;
             background: #fafafa;
         }}
+        
+        .temperature-status {{
+            font-size: 0.9em;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            color: #95a5a6;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid #e8e8e8;
+            transition: all 0.3s ease;
+        }}
+        .temperature-circle.cooling .temperature-status {{
+            color: #2980b9;
+            background: rgba(232, 244, 255, 0.9);
+            border-color: #bde0ff;
+        }}
+        .temperature-circle.heating .temperature-status {{
+            color: #d35400;
+            background: rgba(255, 244, 232, 0.9);
+            border-color: #ffd6b3;
+        }}
+        .temperature-circle.peak-savings .temperature-status {{
+            color: #229954;
+            background: rgba(232, 248, 245, 0.9);
+            border-color: #a9dfbf;
+        }}
+        .temperature-circle.deadband .temperature-status {{
+            color: #6c757d;
+            background: rgba(248, 249, 250, 0.9);
+            border-color: #dee2e6;
+        }}
         @keyframes pulse-savings {{
             0% {{ box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.3); }}
             50% {{ box-shadow: 0 0 0 8px rgba(39, 174, 96, 0.1); }}
@@ -193,7 +227,7 @@ def index():
             font-size: 1.4em;
             color: #95a5a6;
             font-weight: 300;
-            margin-top: -20px;
+            margin-top: 8px;
         }}
         .status-panel {{
             display: flex;
@@ -363,36 +397,7 @@ def index():
             color: #c0392b;
         }}
         
-        .mode-display {{
-            text-align: center;
-            padding: 12px 24px;
-            border-radius: 24px;
-            font-size: 1em;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            min-width: 120px;
-        }}
-        .mode-display.cooling {{ 
-            background: #e8f4ff;
-            color: #2980b9;
-            border: 1px solid #bde0ff;
-        }}
-        .mode-display.heating {{ 
-            background: #fff4e8;
-            color: #d35400;
-            border: 1px solid #ffd6b3;
-        }}
-        .mode-display.peak-savings {{ 
-            background: #e8f8f5;
-            color: #229954;
-            border: 1px solid #a9dfbf;
-        }}
-        .mode-display.deadband {{ 
-            background: #f8f9fa;
-            color: #6c757d;
-            border: 1px solid #dee2e6;
-        }}
+
         .chart-container {{ 
             position: relative; 
             height: 320px; 
@@ -687,6 +692,7 @@ def index():
                 <div class="temperature-circle" id="tempCircle">
                     <div class="temperature-value" id="currentTemp">--</div>
                     <div class="temperature-unit">°F</div>
+                    <div class="temperature-status" id="temperatureStatus">Standby</div>
                 </div>
                 <div class="status-panel">
                     <div class="setpoint-display">
@@ -705,6 +711,7 @@ def index():
                     </div>
                     
                     <!-- Thermostat Lockout Toggle -->
+                                        
                     <div class="lockout-controls" id="lockoutControls" style="display: none;">
                         <div class="lockout-toggle">
                             <input type="checkbox" id="lockoutCheckbox" onchange="toggleThermostatLockout()">
@@ -714,8 +721,6 @@ def index():
                             </label>
                         </div>
                     </div>
-                    
-                    <div class="mode-display" id="modeDisplay">Standby</div>
                 </div>
             </div>
             
@@ -1067,28 +1072,23 @@ def index():
             
             // Determine mode and styling
             const circle = document.getElementById('tempCircle');
-            const modeDisplay = document.getElementById('modeDisplay');
+            const statusDisplay = document.getElementById('temperatureStatus');
             
             // Clear all mode classes
             circle.className = 'temperature-circle';
-            modeDisplay.className = 'mode-display';
             
             if (data.peak_savings) {{
                 circle.classList.add('peak-savings');
-                modeDisplay.classList.add('peak-savings');
-                modeDisplay.textContent = 'Peak Savings';
+                statusDisplay.textContent = 'Peak Savings';
             }} else if (data.system_mode === 'Cooling') {{
                 circle.classList.add('cooling');
-                modeDisplay.classList.add('cooling');
-                modeDisplay.textContent = 'Cooling';
+                statusDisplay.textContent = 'Cooling';
             }} else if (data.system_mode === 'Heating') {{
                 circle.classList.add('heating');
-                modeDisplay.classList.add('heating');
-                modeDisplay.textContent = 'Heating';
+                statusDisplay.textContent = 'Heating';
             }} else {{
                 circle.classList.add('deadband');
-                modeDisplay.classList.add('deadband');
-                modeDisplay.textContent = 'Standby';
+                statusDisplay.textContent = 'Standby';
             }}
             
             // Update device title
