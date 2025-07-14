@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+# Prepare the request body
+        request_body = {
+            "$base": "Real",
+            "value": str(new_setpoint)
+        }
+        print(f"Request body: {request_body}", flush=True)
+        app.logger.info(f"Body: {request_body}")#!/usr/bin/env python3
 """
 Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
@@ -566,7 +572,7 @@ def index():
                             <input type="checkbox" id="lockoutCheckbox" disabled>
                             <label for="lockoutCheckbox" class="lockout-label">
                                 <span class="lockout-text">Thermostat Lockout</span>
-                                <span class="lockout-description">Prevents local thermostat changes</span>
+                                <span class="lockout-description">ON: Blocks thermostat | OFF: Allows temporary overrides</span>
                             </label>
                         </div>
                     </div>
@@ -802,9 +808,9 @@ def index():
             updateLockoutDisplay();
             
             if (thermostatLockout) {{
-                showStatusMessage('Thermostat lockout enabled - Local thermostat changes blocked', 'success');
+                showStatusMessage('Thermostat LOCKED - Local changes blocked completely', 'success');
             }} else {{
-                showStatusMessage('Thermostat lockout disabled - Local thermostat can override', 'success');
+                showStatusMessage('Thermostat UNLOCKED - Can temporarily override (until next admin change)', 'success');
             }}
             
             console.log(`Thermostat lockout: ${{thermostatLockout}}`);
@@ -1152,30 +1158,22 @@ def set_setpoint():
         lockout_mode = request_data.get('lockout', False)
         
         if lockout_mode:
-            # Priority 8 = Manual Operator (overrides thermostat)
+            # Priority 8 = Manual Operator (blocks thermostat completely)
             priority = 8
             setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"LOCKOUT MODE: Using priority {priority} to override thermostat", flush=True)
-            app.logger.info(f"Lockout mode: priority {priority}")
+            print(f"LOCKOUT MODE: Using priority {priority} - thermostat blocked", flush=True)
+            app.logger.info(f"Lockout mode: priority {priority} - thermostat blocked")
         else:
-            # Priority 12 = Below thermostat (can be overridden locally)
-            priority = 12  
+            # Priority 8 for the command, but we'll also clear Priority 10 to allow thermostat temporary control
+            priority = 8
             setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"NORMAL MODE: Using priority {priority} (thermostat can override)", flush=True)
-            app.logger.info(f"Normal mode: priority {priority}")
+            print(f"NORMAL MODE: Using priority {priority} - will clear thermostat priority to allow temporary overrides", flush=True)
+            app.logger.info(f"Normal mode: priority {priority} - allowing thermostat temporary control")
         
         print(f"Setpoint URL: {setpoint_url}", flush=True)
         app.logger.info(f"URL: {setpoint_url}")
         
-        # Prepare the request body
-        request_body = {
-            "$base": "Real",
-            "value": str(new_setpoint)
-        }
-        print(f"Request body: {request_body}", flush=True)
-        app.logger.info(f"Body: {request_body}")
-        
-        # Make the PUT request
+        # Make the PUT request to set our command
         print("Making PUT request to BACnet API...", flush=True)
         app.logger.info("Making PUT request to BACnet API...")
         
@@ -1189,6 +1187,25 @@ def set_setpoint():
         print(f"PUT response status: {response.status_code}", flush=True)
         print(f"PUT response text: {response.text}", flush=True)
         app.logger.info(f"PUT response: {response.status_code} - {response.text}")
+        
+        # If normal mode (lockout OFF), also clear Priority 10 to allow thermostat temporary control
+        if not lockout_mode and response.ok:
+            print("NORMAL MODE: Clearing thermostat priority 10 to allow temporary overrides...", flush=True)
+            app.logger.info("Clearing thermostat priority 10 for temporary control")
+            
+            # Clear Priority 10 (thermostat) by sending NULL
+            clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
+            clear_body = {"$base": "Null", "value": ""}
+            
+            clear_response = requests.put(
+                clear_url,
+                headers=auth_header,
+                json=clear_body,
+                timeout=15
+            )
+            
+            print(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
+            app.logger.info(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}")
         
         if response.ok:
             try:
@@ -1204,10 +1221,15 @@ def set_setpoint():
                 app.logger.info(f"BACnet error: {error_code} - {error_text}")
                 
                 if error_code == '-1' or error_text == 'OK':
+                    lockout_status = "LOCKED" if lockout_mode else "UNLOCKED"
+                    mode_description = "Thermostat blocked" if lockout_mode else "Thermostat can temporarily override"
+                    
                     result = {
                         'success': True, 
                         'setpoint': new_setpoint,
-                        'message': f'Setpoint set to {new_setpoint}°F'
+                        'priority': priority,
+                        'lockout': lockout_mode,
+                        'message': f'Admin setpoint: {new_setpoint}°F ({lockout_status} - {mode_description})'
                     }
                     print(f"SUCCESS: Returning {result}", flush=True)
                     app.logger.info(f"SUCCESS: {result}")
