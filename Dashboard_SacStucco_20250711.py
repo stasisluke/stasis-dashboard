@@ -596,6 +596,10 @@ def get_trend_data():
             if temp_value is None:
                 continue
             
+            # Filter out erroneous temperature readings (reasonable HVAC range: 40-120°F)
+            if temp_value < 40 or temp_value > 120:
+                continue
+            
             # Parse timestamp
             timestamp_raw = value["timestamp"]["value"]
             if timestamp_raw.endswith('Z'):
