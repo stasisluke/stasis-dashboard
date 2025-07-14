@@ -596,6 +596,12 @@ def get_trend_data():
             if temp_value is None:
                 continue
             
+            # Convert to float if it's still a string
+            try:
+                temp_value = float(temp_value)
+            except (ValueError, TypeError):
+                continue
+            
             # Filter out erroneous temperature readings (reasonable HVAC range: 40-120°F)
             if temp_value < 40 or temp_value > 120:
                 continue
