@@ -727,41 +727,7 @@ def index():
                                 }},
                                 stepSize: 1
                             }},
-                            beginAtZero: false,
-                            min: function(context) {{
-                                const data = context.chart.data.datasets[0].data;
-                                if (!data || data.length === 0) return 65;
-                                
-                                const minTemp = Math.min(...data);
-                                const maxTemp = Math.max(...data);
-                                const range = maxTemp - minTemp;
-                                
-                                // If temperature variation is small (< 3°F), use a fixed 10°F window
-                                if (range < 3) {{
-                                    const center = (minTemp + maxTemp) / 2;
-                                    return Math.floor(center - 5);
-                                }}
-                                
-                                // For larger variations, give some padding but keep it reasonable
-                                return Math.floor(minTemp - 2);
-                            }},
-                            max: function(context) {{
-                                const data = context.chart.data.datasets[0].data;
-                                if (!data || data.length === 0) return 75;
-                                
-                                const minTemp = Math.min(...data);
-                                const maxTemp = Math.max(...data);
-                                const range = maxTemp - minTemp;
-                                
-                                // If temperature variation is small (< 3°F), use a fixed 10°F window
-                                if (range < 3) {{
-                                    const center = (minTemp + maxTemp) / 2;
-                                    return Math.ceil(center + 5);
-                                }}
-                                
-                                // For larger variations, give some padding but keep it reasonable
-                                return Math.ceil(maxTemp + 2);
-                            }}
+                            beginAtZero: false
                         }}
                     }}
                 }}
@@ -1075,6 +1041,8 @@ def index():
             if (!trendData.records || trendData.records.length === 0) {{
                 chart.data.labels = [];
                 chart.data.datasets[0].data = [];
+                chart.options.scales.y.min = 65;
+                chart.options.scales.y.max = 75;
                 chart.update();
                 return;
             }}
@@ -1087,8 +1055,36 @@ def index():
                 temperatures.push(record.temperature);
             }});
             
+            // Calculate smart Y-axis range
+            const minTemp = Math.min(...temperatures);
+            const maxTemp = Math.max(...temperatures);
+            const range = maxTemp - minTemp;
+            const center = (minTemp + maxTemp) / 2;
+            
+            let yMin, yMax;
+            
+            if (range < 3) {{
+                // Small variation: use fixed 10°F window centered on data
+                yMin = Math.floor(center - 5);
+                yMax = Math.ceil(center + 5);
+                console.log(`Small variation (${{range.toFixed(1)}}°F): Using fixed 10°F window ${{yMin}}-${{yMax}}°F`);
+            }} else if (range < 8) {{
+                // Medium variation: use fixed 12°F window centered on data
+                yMin = Math.floor(center - 6);
+                yMax = Math.ceil(center + 6);
+                console.log(`Medium variation (${{range.toFixed(1)}}°F): Using 12°F window ${{yMin}}-${{yMax}}°F`);
+            }} else {{
+                // Large variation: show actual range with padding
+                yMin = Math.floor(minTemp - 2);
+                yMax = Math.ceil(maxTemp + 2);
+                console.log(`Large variation (${{range.toFixed(1)}}°F): Using padded range ${{yMin}}-${{yMax}}°F`);
+            }}
+            
+            // Update chart data and axis
             chart.data.labels = labels;
             chart.data.datasets[0].data = temperatures;
+            chart.options.scales.y.min = yMin;
+            chart.options.scales.y.max = yMax;
             chart.update();
         }}
         
