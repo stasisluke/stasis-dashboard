@@ -299,6 +299,62 @@ def index():
             background: #229954;
         }}
         
+        /* NEW: Thermostat Lockout Styles */
+        .lockout-controls {{
+            display: flex;
+            justify-content: center;
+            margin-top: 16px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }}
+        .lockout-toggle {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            user-select: none;
+        }}
+        .lockout-toggle:hover {{
+            background: rgba(52, 152, 219, 0.1);
+        }}
+        .lockout-toggle input[type="checkbox"] {{
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }}
+        .lockout-label {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            cursor: pointer;
+        }}
+        .lockout-text {{
+            font-size: 1em;
+            font-weight: 500;
+            color: #2c3e50;
+        }}
+        .lockout-description {{
+            font-size: 0.8em;
+            color: #7f8c8d;
+            font-style: italic;
+        }}
+        .lockout-toggle.active {{
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            border-radius: 6px;
+        }}
+        .lockout-toggle.active .lockout-text {{
+            color: #e74c3c;
+        }}
+        .lockout-toggle.active .lockout-description {{
+            color: #c0392b;
+        }}
+        
         .mode-display {{
             text-align: center;
             padding: 12px 24px;
@@ -504,6 +560,17 @@ def index():
                         <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F">+</button>
                     </div>
                     
+                    <!-- NEW: Thermostat Lockout Toggle -->
+                    <div class="lockout-controls">
+                        <div class="lockout-toggle" onclick="toggleThermostatLockout()">
+                            <input type="checkbox" id="lockoutCheckbox" disabled>
+                            <label for="lockoutCheckbox" class="lockout-label">
+                                <span class="lockout-text">Thermostat Lockout</span>
+                                <span class="lockout-description">Prevents local thermostat changes</span>
+                            </label>
+                        </div>
+                    </div>
+                    
                     <div class="mode-display" id="modeDisplay">Standby</div>
                 </div>
             </div>
@@ -544,6 +611,7 @@ def index():
         let currentTimeRange = '1h';
         let currentSetpoint = null;
         let setpointLimits = {{ min: 60, max: 85 }}; // Default limits, will be updated from AV10/AV11
+        let thermostatLockout = false; // Track lockout state
         
         // Initialize chart with Ecobee-inspired styling
         function initChart() {{
@@ -676,14 +744,17 @@ def index():
                 
                 showStatusMessage(`Setting temperature to ${{newSetpoint}}°F...`, 'success');
                 
-                console.log('Sending setpoint request:', {{ setpoint: newSetpoint }});
+                console.log('Sending setpoint request:', {{ setpoint: newSetpoint, lockout: thermostatLockout }});
                 
                 const response = await fetch('/api/setpoint', {{
                     method: 'POST',
                     headers: {{
                         'Content-Type': 'application/json',
                     }},
-                    body: JSON.stringify({{ setpoint: newSetpoint }})
+                    body: JSON.stringify({{ 
+                        setpoint: newSetpoint,
+                        lockout: thermostatLockout 
+                    }})
                 }});
                 
                 console.log('Response status:', response.status);
@@ -722,6 +793,33 @@ def index():
                 document.querySelectorAll('.setpoint-btn, .setpoint-set-btn').forEach(btn => {{
                     btn.disabled = false;
                 }});
+            }}
+        }}
+        
+        // NEW: Thermostat Lockout Functions
+        function toggleThermostatLockout() {{
+            thermostatLockout = !thermostatLockout;
+            updateLockoutDisplay();
+            
+            if (thermostatLockout) {{
+                showStatusMessage('Thermostat lockout enabled - Local thermostat changes blocked', 'success');
+            }} else {{
+                showStatusMessage('Thermostat lockout disabled - Local thermostat can override', 'success');
+            }}
+            
+            console.log(`Thermostat lockout: ${{thermostatLockout}}`);
+        }}
+        
+        function updateLockoutDisplay() {{
+            const checkbox = document.getElementById('lockoutCheckbox');
+            const toggle = document.querySelector('.lockout-toggle');
+            
+            checkbox.checked = thermostatLockout;
+            
+            if (thermostatLockout) {{
+                toggle.classList.add('active');
+            }} else {{
+                toggle.classList.remove('active');
             }}
         }}
         
@@ -1050,8 +1148,22 @@ def set_setpoint():
                 'error': f'Setpoint must be between 60°F and 85°F'
             }), 400
         
-        # Build the setpoint URL with priority parameter
-        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=16&alt=json"
+        # Build the setpoint URL based on lockout mode
+        lockout_mode = request_data.get('lockout', False)
+        
+        if lockout_mode:
+            # Priority 8 = Manual Operator (overrides thermostat)
+            priority = 8
+            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
+            print(f"LOCKOUT MODE: Using priority {priority} to override thermostat", flush=True)
+            app.logger.info(f"Lockout mode: priority {priority}")
+        else:
+            # Priority 12 = Below thermostat (can be overridden locally)
+            priority = 12  
+            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
+            print(f"NORMAL MODE: Using priority {priority} (thermostat can override)", flush=True)
+            app.logger.info(f"Normal mode: priority {priority}")
+        
         print(f"Setpoint URL: {setpoint_url}", flush=True)
         app.logger.info(f"URL: {setpoint_url}")
         
