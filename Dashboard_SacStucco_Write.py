@@ -1003,140 +1003,109 @@ def get_thermostat_data():
 @app.route('/api/setpoint', methods=['POST'])
 def set_setpoint():
     """API endpoint to write new setpoint to AV1"""
+    print(f"\n=== SETPOINT REQUEST START ===")
+    
     try:
-        print(f"\n=== SETPOINT REQUEST DEBUG ===")
-        print(f"Request method: {request.method}")
-        print(f"Request headers: {dict(request.headers)}")
-        print(f"Raw request data: {request.get_data()}")
-        
         # Get the new setpoint from request
         request_data = request.get_json()
-        print(f"Parsed JSON data: {request_data}")
+        print(f"Request data received: {request_data}")
         
         if not request_data or 'setpoint' not in request_data:
             print("ERROR: Missing setpoint value in request")
             return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
         
         new_setpoint = float(request_data['setpoint'])
-        print(f"New setpoint requested: {new_setpoint}")
+        print(f"New setpoint: {new_setpoint}")
         
-        # Fetch current setpoint limits from AV10 and AV11
-        setpoint_limits = {}
-        
-        # Fetch maximum setpoint limit (AV10)
-        max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
-        print(f"Fetching max limit from: {max_url}")
-        response = requests.get(max_url, headers=auth_header, timeout=10)
-        print(f"Max limit response status: {response.status_code}")
-        if response.ok:
-            max_data = response.json()
-            print(f"Max limit response data: {max_data}")
-            setpoint_limits['max'] = float(max_data.get('value', 85))
-        else:
-            print(f"Max limit fetch failed: {response.text}")
-            setpoint_limits['max'] = 85
-        
-        # Fetch minimum setpoint limit (AV11)
-        min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
-        print(f"Fetching min limit from: {min_url}")
-        response = requests.get(min_url, headers=auth_header, timeout=10)
-        print(f"Min limit response status: {response.status_code}")
-        if response.ok:
-            min_data = response.json()
-            print(f"Min limit response data: {min_data}")
-            setpoint_limits['min'] = float(min_data.get('value', 60))
-        else:
-            print(f"Min limit fetch failed: {response.text}")
-            setpoint_limits['min'] = 60
-        
-        print(f"Setpoint limits: {setpoint_limits}")
-        
-        # Validate setpoint against dynamic limits
-        if new_setpoint < setpoint_limits['min'] or new_setpoint > setpoint_limits['max']:
-            error_msg = f'Setpoint must be between {setpoint_limits["min"]}°F and {setpoint_limits["max"]}°F'
-            print(f"ERROR: {error_msg}")
+        # For now, let's use simple static limits to isolate the issue
+        # We'll add the dynamic limits back once this works
+        if new_setpoint < 60 or new_setpoint > 85:
+            print(f"ERROR: Setpoint {new_setpoint} out of range")
             return jsonify({
                 'success': False, 
-                'error': error_msg
+                'error': f'Setpoint must be between 60°F and 85°F'
             }), 400
         
-        # Write to AV1 using the BACnet API
+        # Build the setpoint URL
         setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
+        print(f"Setpoint URL: {setpoint_url}")
         
-        # Prepare the request body according to the BACnet API format
+        # Prepare the request body
         request_body = {
             "$base": "Real",
             "value": str(new_setpoint)
         }
+        print(f"Request body: {request_body}")
+        print(f"Auth header (partial): Authorization exists: {'Authorization' in auth_header}")
         
-        print(f"Writing setpoint {new_setpoint} to AV{SETPOINT_AV} on device {DEVICE}")
-        print(f"URL: {setpoint_url}")
-        print(f"Headers: {auth_header}")
-        print(f"Body: {request_body}")
-        
-        # Make the PUT request to write the setpoint
+        # Make the PUT request
+        print("Making PUT request to BACnet API...")
         response = requests.put(
             setpoint_url, 
             headers=auth_header, 
             json=request_body, 
-            timeout=10
+            timeout=15
         )
         
-        print(f"BACnet write response status: {response.status_code}")
-        print(f"BACnet write response headers: {dict(response.headers)}")
-        print(f"BACnet write response body: {response.text}")
+        print(f"PUT response status: {response.status_code}")
+        print(f"PUT response text: {response.text}")
         
         if response.ok:
             try:
                 response_data = response.json()
-                print(f"BACnet write response JSON: {response_data}")
+                print(f"PUT response JSON: {response_data}")
                 
-                # Check if the BACnet response indicates success
+                # Check BACnet response
                 error_code = response_data.get('error', '0')
                 error_text = response_data.get('errorText', 'Unknown')
                 
-                print(f"BACnet error code: {error_code}")
-                print(f"BACnet error text: {error_text}")
-                
                 if error_code == '-1' or error_text == 'OK':
-                    print("SUCCESS: Setpoint written successfully")
-                    return jsonify({
+                    result = {
                         'success': True, 
                         'setpoint': new_setpoint,
-                        'message': f'Setpoint successfully set to {new_setpoint}°F'
-                    })
+                        'message': f'Setpoint set to {new_setpoint}°F'
+                    }
+                    print(f"SUCCESS: Returning {result}")
+                    return jsonify(result)
                 else:
-                    error_msg = f'BACnet error: {error_text} (code: {error_code})'
-                    print(f"ERROR: {error_msg}")
-                    return jsonify({
+                    result = {
                         'success': False, 
-                        'error': error_msg
-                    }), 400
+                        'error': f'BACnet error: {error_text} (code: {error_code})'
+                    }
+                    print(f"BACNET ERROR: Returning {result}")
+                    return jsonify(result), 400
+                    
             except Exception as json_error:
-                print(f"ERROR: Failed to parse BACnet response as JSON: {json_error}")
-                return jsonify({
+                result = {
                     'success': False, 
-                    'error': f'Invalid response format: {response.text}'
-                }), 400
+                    'error': f'Could not parse response: {str(json_error)}'
+                }
+                print(f"JSON PARSE ERROR: {json_error}")
+                print(f"Returning {result}")
+                return jsonify(result), 500
         else:
-            error_msg = f'HTTP {response.status_code}: {response.text}'
-            print(f"ERROR: {error_msg}")
-            return jsonify({
+            result = {
                 'success': False, 
-                'error': error_msg
-            }), response.status_code
+                'error': f'HTTP {response.status_code}: {response.text}'
+            }
+            print(f"HTTP ERROR: Returning {result}")
+            return jsonify(result), response.status_code
             
-    except ValueError as e:
-        error_msg = 'Invalid setpoint value'
-        print(f"ERROR: {error_msg} - {str(e)}")
-        return jsonify({'success': False, 'error': error_msg}), 400
     except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
-        print(f"ERROR: {error_msg}")
+        result = {
+            'success': False, 
+            'error': f'Server error: {str(e)}'
+        }
+        print(f"EXCEPTION: {e}")
         print(f"Exception type: {type(e)}")
         import traceback
-        print(f"Traceback: {traceback.format_exc()}")
-        return jsonify({'success': False, 'error': error_msg}), 500
+        print(f"Full traceback:")
+        traceback.print_exc()
+        print(f"Returning error result: {result}")
+        return jsonify(result), 500
+    
+    finally:
+        print("=== SETPOINT REQUEST END ===\n")
 
 @app.route('/api/trends')
 def get_trend_data():
