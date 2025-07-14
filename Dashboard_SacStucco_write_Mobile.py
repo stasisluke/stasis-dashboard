@@ -1099,15 +1099,9 @@ def index():
                     btn.classList.remove('active');
                 }});
                 
-                const buttonMap = {{
-                    '1h': 'Last Hour',
-                    '4h': 'Last 4 Hours', 
-                    '12h': 'Last 12 Hours',
-                    '24h': 'Last 24 Hours'
-                }};
-                
+                // Fixed button mapping for shortened button text
                 document.querySelectorAll('.time-range-btn').forEach(btn => {{
-                    if (btn.textContent === buttonMap[timeRange]) {{
+                    if (btn.textContent === timeRange.toUpperCase()) {{  // '1h' becomes '1H'
                         btn.classList.add('active');
                     }}
                 }});
