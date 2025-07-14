@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
+Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
@@ -724,9 +724,44 @@ def index():
                                 }},
                                 callback: function(value) {{
                                     return value + '°F';
-                                }}
+                                }},
+                                stepSize: 1
                             }},
-                            beginAtZero: false
+                            beginAtZero: false,
+                            min: function(context) {{
+                                const data = context.chart.data.datasets[0].data;
+                                if (!data || data.length === 0) return 65;
+                                
+                                const minTemp = Math.min(...data);
+                                const maxTemp = Math.max(...data);
+                                const range = maxTemp - minTemp;
+                                
+                                // If temperature variation is small (< 3°F), use a fixed 10°F window
+                                if (range < 3) {{
+                                    const center = (minTemp + maxTemp) / 2;
+                                    return Math.floor(center - 5);
+                                }}
+                                
+                                // For larger variations, give some padding but keep it reasonable
+                                return Math.floor(minTemp - 2);
+                            }},
+                            max: function(context) {{
+                                const data = context.chart.data.datasets[0].data;
+                                if (!data || data.length === 0) return 75;
+                                
+                                const minTemp = Math.min(...data);
+                                const maxTemp = Math.max(...data);
+                                const range = maxTemp - minTemp;
+                                
+                                // If temperature variation is small (< 3°F), use a fixed 10°F window
+                                if (range < 3) {{
+                                    const center = (minTemp + maxTemp) / 2;
+                                    return Math.ceil(center + 5);
+                                }}
+                                
+                                // For larger variations, give some padding but keep it reasonable
+                                return Math.ceil(maxTemp + 2);
+                            }}
                         }}
                     }}
                 }}
