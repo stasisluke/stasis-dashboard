@@ -199,7 +199,7 @@ def index():
             font-size: 1.4em;
             color: #95a5a6;
             font-weight: 300;
-            margin-top: -20px;
+            margin-top: 8px;
         }}
         .status-panel {{
             display: flex;
