@@ -338,63 +338,35 @@ def index():
             background: #229954;
         }}
         
-        /* Thermostat Lockout Styles */
-        .lockout-controls {{
+        /* Simplified Lockout Toggle */
+        .lockout-section {{
             display: flex;
             justify-content: center;
-            margin-top: 16px;
+            margin-top: 20px;
             padding: 16px;
             background: #f8f9fa;
             border-radius: 8px;
             border: 1px solid #e9ecef;
         }}
-        .lockout-toggle {{
+        .lockout-toggle-simple {{
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             cursor: pointer;
-            padding: 12px 16px;
-            border-radius: 6px;
-            transition: all 0.2s ease;
+            font-size: 0.9em;
+            color: #6c757d;
             user-select: none;
-            width: 100%;
         }}
-        .lockout-toggle:hover {{
-            background: rgba(52, 152, 219, 0.1);
-        }}
-        .lockout-toggle input[type="checkbox"] {{
-            width: 20px;
-            height: 20px;
+        .lockout-toggle-simple input[type="checkbox"] {{
+            width: 18px;
+            height: 18px;
             cursor: pointer;
-            flex-shrink: 0;
         }}
-        .lockout-label {{
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
+        .lockout-toggle-simple:hover {{
+            color: #495057;
+        }}
+        .lockout-text-simple {{
             cursor: pointer;
-            flex: 1;
-        }}
-        .lockout-text {{
-            font-size: 1em;
-            font-weight: 500;
-            color: #2c3e50;
-        }}
-        .lockout-description {{
-            font-size: 0.8em;
-            color: #7f8c8d;
-            font-style: italic;
-        }}
-        .lockout-toggle.active {{
-            background: rgba(231, 76, 60, 0.1);
-            border: 1px solid rgba(231, 76, 60, 0.3);
-            border-radius: 6px;
-        }}
-        .lockout-toggle.active .lockout-text {{
-            color: #e74c3c;
-        }}
-        .lockout-toggle.active .lockout-description {{
-            color: #c0392b;
         }}
         
 
@@ -739,22 +711,21 @@ def index():
         <div class="card">
             <h3>Temperature History</h3>
             <div class="chart-controls">
-                <button class="time-range-btn active" onclick="loadTrendData('1h')">Last Hour</button>
-                <button class="time-range-btn" onclick="loadTrendData('4h')">Last 4 Hours</button>
-                <button class="time-range-btn" onclick="loadTrendData('12h')">Last 12 Hours</button>
-                <button class="time-range-btn" onclick="loadTrendData('24h')">Last 24 Hours</button>
+                <button class="time-range-btn active" onclick="loadTrendData('1h')">1H</button>
+                <button class="time-range-btn" onclick="loadTrendData('4h')">4H</button>
+                <button class="time-range-btn" onclick="loadTrendData('12h')">12H</button>
+                <button class="time-range-btn" onclick="loadTrendData('24h')">24H</button>
             </div>
             <div class="chart-container">
                 <canvas id="temperatureChart"></canvas>
             </div>
-            <div id="chartStatus" class="loading">Loading chart data...</div>
+            <div id="chartStatus" class="loading">Loading...</div>
         </div>
         
         <div class="card">
             <div class="control-buttons">
-                <button class="btn primary" onclick="fetchData()">Refresh Data</button>
-                <button class="btn" onclick="toggleAutoRefresh()">Toggle Auto-Refresh</button>
-                <button class="btn" onclick="refreshChart()">Refresh Chart</button>
+                <button class="btn primary" onclick="fetchData()">Refresh</button>
+                <button class="btn" onclick="toggleAutoRefresh()">Auto-Refresh</button>
             </div>
         </div>
     </div>
@@ -982,16 +953,7 @@ def index():
         
         function updateLockoutDisplay() {{
             const checkbox = document.getElementById('lockoutCheckbox');
-            const toggle = document.querySelector('.lockout-toggle');
-            
-            // Don't force checkbox state - let it follow user clicks
-            // checkbox.checked = thermostatLockout; // Remove this line
-            
-            if (thermostatLockout) {{
-                toggle.classList.add('active');
-            }} else {{
-                toggle.classList.remove('active');
-            }}
+            // Visual feedback is now handled by the simple checkbox - no complex styling needed
         }}
         
         function showStatusMessage(message, type) {{
@@ -1041,7 +1003,7 @@ def index():
         function hideLoadingState() {{
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('setpointControls').style.display = 'flex';
-            document.getElementById('lockoutControls').style.display = 'flex';
+            document.getElementById('lockoutSection').style.display = 'flex';
         }}
         
         function updateCurrentDisplay(data) {{
