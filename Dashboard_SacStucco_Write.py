@@ -685,17 +685,27 @@ def index():
                 console.log('Response status:', response.status);
                 console.log('Response headers:', response.headers);
                 
+                if (!response.ok) {{
+                    throw new Error(`HTTP ${{response.status}}: ${{response.statusText}}`);
+                }}
+                
                 const result = await response.json();
                 console.log('Response data:', result);
                 
-                if (result.success) {{
-                    showStatusMessage(`Temperature set to ${{newSetpoint}}°F successfully!`, 'success');
+                // Check if the result has the success property and it's true
+                if (result && result.success === true) {{
+                    const message = result.message || `Temperature set to ${{newSetpoint}}°F successfully!`;
+                    showStatusMessage(message, 'success');
+                    console.log('Success! Refreshing data in 1 second...');
+                    
                     // Refresh data to show the change
                     setTimeout(() => {{
+                        console.log('Refreshing data...');
                         fetchData();
                     }}, 1000);
                 }} else {{
-                    showStatusMessage(`Error: ${{result.error || 'Failed to set temperature'}}`, 'error');
+                    const errorMsg = result?.error || 'Unknown error occurred';
+                    showStatusMessage(`Error: ${{errorMsg}}`, 'error');
                     console.error('Setpoint error:', result);
                 }}
                 
@@ -704,6 +714,7 @@ def index():
                 showStatusMessage(`Network Error: ${{error.message}}`, 'error');
             }} finally {{
                 // Re-enable controls
+                console.log('Re-enabling controls...');
                 document.querySelectorAll('.setpoint-btn, .setpoint-set-btn').forEach(btn => {{
                     btn.disabled = false;
                 }});
@@ -711,15 +722,18 @@ def index():
         }}
         
         function showStatusMessage(message, type) {{
+            console.log(`Showing status message: "${{message}}" (type: ${{type}})`);
             const statusDiv = document.getElementById('statusMessage');
             statusDiv.textContent = message;
             statusDiv.className = `status-message ${{type}}`;
+            statusDiv.style.display = 'block'; // Make sure it's visible
             
-            // Auto-hide success messages after 3 seconds
+            // Auto-hide success messages after 5 seconds (increased from 3)
             if (type === 'success') {{
                 setTimeout(() => {{
+                    console.log('Auto-hiding success message');
                     statusDiv.style.display = 'none';
-                }}, 3000);
+                }}, 5000);
             }}
         }}
         
