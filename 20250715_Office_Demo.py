@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
+Ecobee-Inspired Thermostat Dashboard with Unified Setpoint Control
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
@@ -54,7 +54,7 @@ auth_header = {
 
 @app.route('/')
 def index():
-    """Serve the main dashboard HTML with setpoint controls and thermostat lockout"""
+    """Serve the main dashboard HTML with unified setpoint controls"""
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -229,101 +229,166 @@ def index():
             font-weight: 300;
             margin-top: 8px;
         }}
-        .status-panel {{
+        
+        /* Unified Thermostat Control */
+        .thermostat-control {{
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 16px;
+            padding: 24px 20px;
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }}
+        .thermostat-control:hover {{
+            border-color: #3498db;
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.15);
+        }}
+        
+        .current-temp-label {{
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8c8d;
+            margin-bottom: 4px;
+        }}
+        
+        .current-temp-value {{
+            font-size: 2.8em;
+            font-weight: 200;
+            color: #2c3e50;
+            line-height: 1;
+            margin-bottom: 16px;
+        }}
+        
+        .setpoint-section {{
+            width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 16px;
-            min-width: 200px;
-        }}
-        .setpoint-display {{
-            text-align: center;
-            padding: 16px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-            width: 100%;
-        }}
-        .setpoint-label {{
-            font-size: 0.9em;
-            color: #6c757d;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        .setpoint-value {{
-            font-size: 1.8em;
-            font-weight: 500;
-            color: #2c3e50;
         }}
         
-        /* Setpoint Control Styles - Desktop Layout */
+        .setpoint-header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 8px;
+        }}
+        
+        .setpoint-label {{
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8c8d;
+        }}
+        
+        .lockout-indicator {{
+            font-size: 0.7em;
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }}
+        .lockout-indicator.locked {{
+            background: #ffe6e6;
+            color: #c0392b;
+            border: 1px solid #f1c0c0;
+        }}
+        .lockout-indicator.unlocked {{
+            background: #e8f5e8;
+            color: #27ae60;
+            border: 1px solid #c8e6c8;
+        }}
+        
         .setpoint-controls {{
             display: flex;
             align-items: center;
+            gap: 20px;
+            width: 100%;
             justify-content: center;
-            gap: 12px;
-            margin-top: 16px;
-            padding: 16px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
         }}
+        
         .setpoint-btn {{
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             border: 2px solid #3498db;
             background: white;
             color: #3498db;
-            font-size: 1.5em;
-            font-weight: bold;
+            font-size: 1.8em;
+            font-weight: 300;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
             user-select: none;
-            order: 0; /* Default order for desktop */
-        }}
-        .setpoint-btn.plus {{
-            order: 2; /* Plus button on the right on desktop */
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
         }}
         .setpoint-btn:hover {{
             background: #3498db;
             color: white;
             transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.25);
         }}
         .setpoint-btn:active {{
             transform: scale(0.95);
         }}
         .setpoint-btn:disabled {{
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
             transform: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }}
-        .setpoint-input-container {{
+        
+        .setpoint-display {{
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 8px;
-            order: 1; /* Input in the middle */
+            min-width: 120px;
         }}
+        
+        .setpoint-value {{
+            font-size: 2.2em;
+            font-weight: 500;
+            color: #2c3e50;
+            line-height: 1;
+        }}
+        
         .setpoint-input {{
-            width: 80px;
+            width: 100px;
             text-align: center;
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: 500;
             padding: 8px;
             border: 1px solid #bdc3c7;
-            border-radius: 4px;
-            background: white;
+            border-radius: 6px;
+            background: #f8f9fa;
+            transition: all 0.2s ease;
         }}
         .setpoint-input:focus {{
             outline: none;
             border-color: #3498db;
-            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
         }}
+        
+        .setpoint-actions {{
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }}
+        
         .setpoint-set-btn {{
             padding: 6px 12px;
             border: 1px solid #27ae60;
@@ -331,44 +396,41 @@ def index():
             color: white;
             border-radius: 4px;
             font-size: 0.8em;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s ease;
         }}
         .setpoint-set-btn:hover {{
             background: #229954;
+            transform: translateY(-1px);
         }}
         
-        /* Simplified Lockout Toggle */
-        .lockout-section {{
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-            padding: 16px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-        }}
-        .lockout-toggle-simple {{
+        .lockout-toggle {{
             display: flex;
             align-items: center;
             gap: 10px;
+            margin-top: 20px;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
             cursor: pointer;
-            font-size: 0.9em;
-            color: #6c757d;
+            transition: all 0.2s ease;
             user-select: none;
         }}
-        .lockout-toggle-simple input[type="checkbox"] {{
-            width: 18px;
-            height: 18px;
+        .lockout-toggle:hover {{
+            background: #e9ecef;
+        }}
+        .lockout-toggle input[type="checkbox"] {{
+            width: 16px;
+            height: 16px;
             cursor: pointer;
         }}
-        .lockout-toggle-simple:hover {{
-            color: #495057;
-        }}
-        .lockout-text-simple {{
+        .lockout-toggle-label {{
+            font-size: 0.85em;
+            color: #6c757d;
             cursor: pointer;
         }}
-        
 
         .chart-container {{ 
             position: relative; 
@@ -533,7 +595,7 @@ def index():
             }}
             .temperature-display {{
                 flex-direction: column;
-                gap: 24px;
+                gap: 32px;
             }}
             .temperature-circle {{
                 width: 240px;
@@ -543,46 +605,25 @@ def index():
                 font-size: 3.5em;
             }}
             
-            /* Mobile Setpoint Controls - Vertical Layout with Reversed Order */
-            .setpoint-controls {{
-                flex-direction: column;
-                gap: 16px;
-                padding: 12px;
+            .thermostat-control {{
+                min-width: 260px;
+                padding: 20px 16px;
+            }}
+            .current-temp-value {{
+                font-size: 2.4em;
+            }}
+            .setpoint-value {{
+                font-size: 1.9em;
             }}
             .setpoint-btn {{
-                width: 50px;
-                height: 50px;
-                font-size: 1.8em;
-                order: 0; /* Reset order for mobile */
+                width: 44px;
+                height: 44px;
+                font-size: 1.6em;
             }}
-            .setpoint-btn.plus {{
-                order: 0; /* Plus button on TOP for mobile (first/top position) */
-            }}
-            .setpoint-btn.minus {{
-                order: 2; /* Minus button on BOTTOM for mobile (last/bottom position) */
-            }}
-            .setpoint-input-container {{
-                width: 100%;
-                order: 1; /* Input stays in middle */
-            }}
-            .setpoint-input {{
-                width: 100px;
-                font-size: 1.4em;
-                padding: 12px;
+            .setpoint-controls {{
+                gap: 16px;
             }}
             
-            .lockout-controls {{
-                padding: 12px;
-            }}
-            .lockout-section {{
-                padding: 12px;
-            }}
-            .lockout-toggle {{
-                padding: 16px 12px;
-            }}
-            .lockout-toggle-simple {{
-                font-size: 1em;
-            }}
             .chart-container {{
                 height: 280px;
                 margin-top: 20px;
@@ -602,15 +643,6 @@ def index():
                 padding: 10px 16px;
                 font-size: 0.9em;
             }}
-            /* Make touch targets larger for mobile */
-            .setpoint-btn:hover {{
-                transform: none; /* Disable hover effects on mobile */
-            }}
-            .setpoint-btn:active {{
-                transform: scale(0.95);
-                background: #3498db;
-                color: white;
-            }}
         }}
         
         /* Extra small screens */
@@ -628,13 +660,23 @@ def index():
             .temperature-value {{
                 font-size: 3em;
             }}
-            .setpoint-controls {{
-                padding: 8px;
+            .thermostat-control {{
+                min-width: 240px;
+                padding: 16px 12px;
+            }}
+            .current-temp-value {{
+                font-size: 2.2em;
+            }}
+            .setpoint-value {{
+                font-size: 1.7em;
             }}
             .setpoint-btn {{
-                width: 45px;
-                height: 45px;
-                font-size: 1.6em;
+                width: 40px;
+                height: 40px;
+                font-size: 1.4em;
+            }}
+            .setpoint-controls {{
+                gap: 12px;
             }}
             .chart-container {{
                 height: 240px;
@@ -662,38 +704,40 @@ def index():
         </div>
         
         <div class="card">
-            <h3>Current Temperature & Controls</h3>
+            <h3>Thermostat Control</h3>
             <div class="temperature-display">
                 <div class="temperature-circle" id="tempCircle">
                     <div class="temperature-value" id="currentTemp">--</div>
                     <div class="temperature-unit">°F</div>
                     <div class="temperature-status" id="temperatureStatus">Standby</div>
                 </div>
-                <div class="status-panel">
-                    <div class="setpoint-display">
-                        <div class="setpoint-label">Target Temperature</div>
-                        <div class="setpoint-value" id="setpointValue">--°F</div>
-                    </div>
+                
+                <!-- Unified Thermostat Control -->
+                <div class="thermostat-control" id="thermostatControl" style="display: none;">
+                    <div class="current-temp-label">Current Temperature</div>
+                    <div class="current-temp-value" id="currentTempMini">--°F</div>
                     
-                    <!-- Setpoint Controls with improved mobile layout -->
-                    <div class="setpoint-controls" id="setpointControls" style="display: none;">
-                        <button class="setpoint-btn minus" onclick="adjustSetpoint(-1)" title="Decrease by 1°F">−</button>
-                        <div class="setpoint-input-container">
-                            <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)">
-                            <button class="setpoint-set-btn" onclick="setCustomSetpoint()">Set</button>
+                    <div class="setpoint-section">
+                        <div class="setpoint-header">
+                            <div class="setpoint-label">Set Temperature</div>
+                            <div class="lockout-indicator" id="lockoutIndicator">Unlocked</div>
                         </div>
-                        <button class="setpoint-btn plus" onclick="adjustSetpoint(1)" title="Increase by 1°F">+</button>
-                    </div>
-                    
-                    <!-- Thermostat Lockout Toggle -->
-                                        
-                    <div class="lockout-controls" id="lockoutControls" style="display: none;">
-                        <div class="lockout-toggle">
-                            <input type="checkbox" id="lockoutCheckbox" onchange="toggleThermostatLockout()">
-                            <label for="lockoutCheckbox" class="lockout-label">
-                                <span class="lockout-text">Thermostat Lockout</span>
-                                <span class="lockout-description">ON: Blocks thermostat | OFF: Allows temporary overrides</span>
-                            </label>
+                        
+                        <div class="setpoint-controls">
+                            <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F" id="tempDown">−</button>
+                            <div class="setpoint-display">
+                                <div class="setpoint-value" id="setpointValue">--°F</div>
+                                <div class="setpoint-actions">
+                                    <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)" placeholder="75">
+                                    <button class="setpoint-set-btn" onclick="setCustomSetpoint()">Set</button>
+                                </div>
+                            </div>
+                            <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F" id="tempUp">+</button>
+                        </div>
+                        
+                        <div class="lockout-toggle" onclick="toggleThermostatLockout()">
+                            <input type="checkbox" id="lockoutCheckbox" onchange="event.stopPropagation(); toggleThermostatLockout()">
+                            <div class="lockout-toggle-label">Block thermostat overrides</div>
                         </div>
                     </div>
                 </div>
@@ -739,7 +783,7 @@ def index():
         let refreshInterval;
         let currentTimeRange = '1h';
         let currentSetpoint = null;
-        let setpointLimits = {{ min: 60, max: 85 }}; // Default limits, will be updated from AV10/AV11
+        let setpointLimits = {{ min: 60, max: 85 }}; // Default limits, will be updated from API
         let thermostatLockout = false; // Track lockout state
         
         // Initialize chart with Ecobee-inspired styling
@@ -756,8 +800,8 @@ def index():
                         backgroundColor: 'rgba(52, 152, 219, 0.08)',
                         tension: 0.4,
                         fill: true,
-                        pointRadius: 2, // Will be dynamically updated
-                        pointHoverRadius: 6, // Will be dynamically updated
+                        pointRadius: 2,
+                        pointHoverRadius: 6,
                         pointBackgroundColor: '#3498db',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
@@ -912,7 +956,7 @@ def index():
                     setTimeout(() => {{
                         console.log('Confirming setpoint change...');
                         fetchData();
-                    }}, 500); // Reduced from 1000ms to 500ms
+                    }}, 500);
                 }} else {{
                     // If failed, revert the optimistic update
                     fetchData();
@@ -955,8 +999,14 @@ def index():
         }}
         
         function updateLockoutDisplay() {{
-            const checkbox = document.getElementById('lockoutCheckbox');
-            // Visual feedback is now handled by the simple checkbox - no complex styling needed
+            const indicator = document.getElementById('lockoutIndicator');
+            if (thermostatLockout) {{
+                indicator.textContent = 'Locked';
+                indicator.className = 'lockout-indicator locked';
+            }} else {{
+                indicator.textContent = 'Unlocked';
+                indicator.className = 'lockout-indicator unlocked';
+            }}
         }}
         
         function showStatusMessage(message, type) {{
@@ -964,9 +1014,9 @@ def index():
             const statusDiv = document.getElementById('statusMessage');
             statusDiv.textContent = message;
             statusDiv.className = `status-message ${{type}}`;
-            statusDiv.style.display = 'block'; // Make sure it's visible
+            statusDiv.style.display = 'block';
             
-            // Auto-hide success messages after 5 seconds (increased from 3)
+            // Auto-hide success messages after 5 seconds
             if (type === 'success') {{
                 setTimeout(() => {{
                     console.log('Auto-hiding success message');
@@ -1005,20 +1055,23 @@ def index():
         
         function hideLoadingState() {{
             document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('setpointControls').style.display = 'flex';
-            document.getElementById('lockoutControls').style.display = 'flex';
+            document.getElementById('thermostatControl').style.display = 'flex';
         }}
         
         function updateCurrentDisplay(data) {{
-            // Update temperature circle
+            // Update main temperature circle
             const tempValue = data.temperature ? data.temperature.toFixed(1) : '--';
             const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
             
             const currentTempEl = document.getElementById('currentTemp');
+            const currentTempMiniEl = document.getElementById('currentTempMini');
             const setpointValueEl = document.getElementById('setpointValue');
             
             if (currentTempEl) {{
                 currentTempEl.textContent = tempValue;
+            }}
+            if (currentTempMiniEl) {{
+                currentTempMiniEl.textContent = tempValue + '°F';
             }}
             if (setpointValueEl) {{
                 setpointValueEl.textContent = setpointValue + '°F';
@@ -1027,7 +1080,7 @@ def index():
             // Update current setpoint for controls
             currentSetpoint = data.setpoint;
             
-            // Update setpoint limits from AV10/AV11
+            // Update setpoint limits from API
             if (data.setpoint_limits) {{
                 setpointLimits = data.setpoint_limits;
                 
@@ -1036,6 +1089,7 @@ def index():
                 if (input) {{
                     input.min = setpointLimits.min;
                     input.max = setpointLimits.max;
+                    input.placeholder = Math.round((setpointLimits.min + setpointLimits.max) / 2);
                 }}
             }}
             
@@ -1047,7 +1101,7 @@ def index():
                 }}
             }}
             
-            // Determine mode and styling
+            // Determine mode and styling for temperature circle
             const circle = document.getElementById('tempCircle');
             const statusDisplay = document.getElementById('temperatureStatus');
             
@@ -1101,7 +1155,7 @@ def index():
                 
                 // Fixed button mapping for shortened button text
                 document.querySelectorAll('.time-range-btn').forEach(btn => {{
-                    if (btn.textContent === timeRange.toUpperCase()) {{  // '1h' becomes '1H'
+                    if (btn.textContent === timeRange.toUpperCase()) {{
                         btn.classList.add('active');
                     }}
                 }});
@@ -1180,11 +1234,6 @@ def index():
             chart.update();
         }}
         
-        // Refresh chart with current time range
-        function refreshChart() {{
-            loadTrendData(currentTimeRange);
-        }}
-        
         // Toggle auto-refresh for current data
         function toggleAutoRefresh() {{
             autoRefresh = !autoRefresh;
@@ -1195,7 +1244,7 @@ def index():
                 btn.classList.add('primary');
             }} else {{
                 clearInterval(refreshInterval);
-                btn.textContent = 'Toggle Auto-Refresh';
+                btn.textContent = 'Auto-Refresh';
                 btn.classList.remove('primary');
             }}
         }}
@@ -1235,10 +1284,10 @@ def get_thermostat_data():
             setpoint_data = response.json()
             data['setpoint'] = float(setpoint_data.get('value', 0))
         
-        # Fetch setpoint limits from AV10 (max) and AV11 (min)
+        # Fetch setpoint limits from AV99 (max) and AV98 (min)
         setpoint_limits = {}
         
-        # Fetch maximum setpoint limit (AV10)
+        # Fetch maximum setpoint limit (AV99)
         max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
         response = requests.get(max_url, headers=auth_header, timeout=10)
         if response.ok:
@@ -1247,7 +1296,7 @@ def get_thermostat_data():
         else:
             setpoint_limits['max'] = 85
         
-        # Fetch minimum setpoint limit (AV11)
+        # Fetch minimum setpoint limit (AV98)
         min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
         response = requests.get(min_url, headers=auth_header, timeout=10)
         if response.ok:
@@ -1595,7 +1644,7 @@ def get_trend_data():
         })
 
 if __name__ == '__main__':
-    print(f"Starting Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout...")
+    print(f"Starting Thermostat Dashboard with Unified Setpoint Control...")
     print(f"EnteliWeb Server: {SERVER}")
     print(f"Site: {SITE}")
     print(f"Device: {DEVICE}")
@@ -1607,12 +1656,14 @@ if __name__ == '__main__':
     print(f"API Test: http://localhost:8000/api/thermostat")
     print(f"Trend API Test: http://localhost:8000/api/trends?range=1h")
     print("\nMake sure to update the PASSWORD variable!")
-    print(f"\nSetpoint Control Features:")
+    print(f"\nUnified Thermostat Control Features:")
+    print(f"- Single cohesive control block like real thermostats")
     print(f"- +/- buttons for 1°F adjustments")
     print(f"- Manual input field for precise control")
+    print(f"- Visual lockout status indicator")
     print(f"- Dynamic safety limits from AV{SETPOINT_MAX_AV} (max) and AV{SETPOINT_MIN_AV} (min)")
     print(f"- Thermostat Lockout toggle for admin control")
     print(f"- Real-time feedback and status messages")
-    print(f"- MOBILE LAYOUT FIXED: + button on top, - button on bottom for better UX")
+    print(f"- Mobile-optimized responsive design")
     
     app.run(host='0.0.0.0', port=8000, debug=True)
