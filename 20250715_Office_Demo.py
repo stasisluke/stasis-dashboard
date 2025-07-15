@@ -1298,6 +1298,9 @@ def set_setpoint():
         }
         print(f"Request body: {request_body}", flush=True)
         
+        # Build the setpoint URL based on lockout mode
+        lockout_mode = request_data.get('lockout', False)
+        
         # Based on your priority array analysis:
         # Priority 8 = "manual-operator" (OCCUPIED - can't write here)
         # Priority 10 = "68.0 °F PG_eZNS_Display" (thermostat)
