@@ -21,7 +21,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # ========================================
 
 # Server Configuration
-SERVER = "https://stasisenergygroup.entelicloud.com/"
+SERVER = "stasisenergygroup.entelicloud.com/"
 SITE = "SEG Office"
 DEVICE = "10200"
 USER = "stasis_api"
