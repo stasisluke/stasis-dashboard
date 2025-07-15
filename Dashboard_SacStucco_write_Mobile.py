@@ -37,7 +37,7 @@ SETPOINT_AV = 1                  # Analog Value for active zone setpoint (THIS I
 SETPOINT_MAX_AV = 10             # Analog Value for maximum setpoint limit
 SETPOINT_MIN_AV = 11             # Analog Value for minimum setpoint limit
 SYSTEM_MODE_MV = 2               # Multi-state Value for system mode (heating/cooling/deadband)
-PEAK_SAVINGS_BV = 2025           # Binary Value for peak savings mode status
+PEAK_SAVINGS_BV = 16           # Binary Value for peak savings mode status
 FAN_STATUS_BO = 1                # Binary Output for fan status
 TEMP_TREND_LOG_INSTANCE = 27     # Trend Log instance for temperature history
 
