@@ -21,7 +21,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # ========================================
 
 # Server Configuration
-SERVER = "stasisenergygroup.entelicloud.com/"
+SERVER = "stasisenergygroup.entelicloud.com" # no https, no slashes. Simply site with *.com
 SITE = "SEG Office"
 DEVICE = "10200"
 USER = "stasis_api"
