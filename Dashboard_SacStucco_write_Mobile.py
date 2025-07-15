@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Ecobee-Inspired Thermostat Dashboard with AV1 Setpoint Control and Thermostat Lockout
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
 """
 
