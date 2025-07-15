@@ -1,99 +1,4 @@
-@app.route('/api/setpoint', methods=['POST'])
-def set_setpoint():
-    """API endpoint to write new setpoint to AV1"""
-    print(f"\n=== SETPOINT REQUEST START ===", flush=True)
-    
-    try:
-        # Get the new setpoint from request
-        request_data = request.get_json()
-        print(f"Request data received: {request_data}", flush=True)
-        
-        if not request_data or 'setpoint' not in request_data:
-            error_msg = "Missing setpoint value in request"
-            print(f"ERROR: {error_msg}", flush=True)
-            return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
-        
-        new_setpoint = float(request_data['setpoint'])
-        print(f"New setpoint: {new_setpoint}", flush=True)
-        
-        # Validate setpoint range - use dynamic limits from API if available
-        min_limit = 60  # Default minimum
-        max_limit = 85  # Default maximum
-        
-        # Try to get actual limits from the API first
-        try:
-            # Fetch actual limits
-            max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
-            max_response = requests.get(max_url, headers=auth_header, timeout=5)
-            if max_response.ok:
-                max_data = max_response.json()
-                max_limit = float(max_data.get('value', 85))
-            
-            min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
-            min_response = requests.get(min_url, headers=auth_header, timeout=5)
-            if min_response.ok:
-                min_data = min_response.json()
-                min_limit = float(min_data.get('value', 60))
-        except Exception as limit_error:
-            print(f"Warning: Could not fetch setpoint limits, using defaults. Error: {limit_error}", flush=True)
-        
-        if new_setpoint < min_limit or new_setpoint > max_limit:
-            error_msg = f"Setpoint {new_setpoint} out of range ({min_limit}-{max_limit}°F)"
-            print(f"ERROR: {error_msg}", flush=True)
-            return jsonify({
-                'success': False, 
-                'error': f'Setpoint must be between {min_limit}°F and {max_limit}°F'
-            }), 400
-        
-        # Prepare the request body - try different formats
-        request_body = {
-            "$base": "Real",
-            "value": new_setpoint  # Try sending as number instead of string
-        }
-        print(f"Request body: {request_body}", flush=True)
-        
-        # Build the setpoint URL based on lockout mode
-        lockout_mode = request_data.get('lockout', False)
-        
-        if lockout_mode:
-            # Priority 8 = Manual Operator (blocks thermostat completely)
-            priority = 8
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"LOCKOUT MODE: Using priority {priority} - thermostat blocked", flush=True)
-        else:
-            # Priority 8 for the command, but we'll also clear Priority 10 to allow thermostat temporary control
-            priority = 8
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"NORMAL MODE: Using priority {priority} - will clear thermostat priority to allow temporary overrides", flush=True)
-        
-        print(f"Setpoint URL: {setpoint_url}", flush=True)
-        
-        # Make the PUT request to set our command
-        print("Making PUT request to BACnet API...", flush=True)
-        
-        response = requests.put(
-            setpoint_url, 
-            headers=auth_header, 
-            json=request_body, 
-            timeout=15
-        )
-        
-        print(f"PUT response status: {response.status_code}", flush=True)
-        print(f"PUT response text: {response.text}", flush=True)
-        
-        if response.ok:
-            try:
-                response_data = response.json()
-                print(f"PUT response JSON: {response_data}", flush=True)
-                
-                # Check BACnet response - look for different error patterns
-                error_code = response_data.get('error', '0')
-                error_text = response_data.get('errorText', 'Unknown')
-                
-                print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
-                
-                # BACnet success conditions
-                if (error_code == '-#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Ecobee-Inspired Thermostat Dashboard with Unified Setpoint Control
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
@@ -343,23 +248,6 @@ def index():
             box-shadow: 0 6px 20px rgba(52, 152, 219, 0.15);
         }}
         
-        .current-temp-label {{
-            font-size: 0.75em;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8c8d;
-            margin-bottom: 4px;
-        }}
-        
-        .current-temp-value {{
-            font-size: 2.8em;
-            font-weight: 200;
-            color: #2c3e50;
-            line-height: 1;
-            margin-bottom: 16px;
-        }}
-        
         .setpoint-section {{
             width: 100%;
             display: flex;
@@ -460,46 +348,6 @@ def index():
             line-height: 1;
             margin-bottom: 12px;
             transition: all 0.2s ease;
-        }}
-        
-        .setpoint-input {{
-            width: 100px;
-            text-align: center;
-            font-size: 1.1em;
-            font-weight: 500;
-            padding: 8px;
-            border: 1px solid #bdc3c7;
-            border-radius: 6px;
-            background: #f8f9fa;
-            transition: all 0.2s ease;
-        }}
-        .setpoint-input:focus {{
-            outline: none;
-            border-color: #3498db;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-        }}
-        
-        .setpoint-actions {{
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }}
-        
-        .setpoint-set-btn {{
-            padding: 6px 12px;
-            border: 1px solid #27ae60;
-            background: #27ae60;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }}
-        .setpoint-set-btn:hover {{
-            background: #229954;
-            transform: translateY(-1px);
         }}
         
         .lockout-toggle {{
@@ -706,11 +554,8 @@ def index():
                 min-width: 260px;
                 padding: 20px 16px;
             }}
-            .current-temp-value {{
-                font-size: 2.4em;
-            }}
             .setpoint-value {{
-                font-size: 1.9em;
+                font-size: 2.8em;
             }}
             .setpoint-btn {{
                 width: 44px;
@@ -761,11 +606,8 @@ def index():
                 min-width: 240px;
                 padding: 16px 12px;
             }}
-            .current-temp-value {{
-                font-size: 2.2em;
-            }}
             .setpoint-value {{
-                font-size: 1.7em;
+                font-size: 2.4em;
             }}
             .setpoint-btn {{
                 width: 40px;
@@ -1160,22 +1002,6 @@ def index():
             // Update setpoint limits from API
             if (data.setpoint_limits) {{
                 setpointLimits = data.setpoint_limits;
-                
-                // Update input field constraints
-                const input = document.getElementById('setpointInput');
-                if (input) {{
-                    input.min = setpointLimits.min;
-                    input.max = setpointLimits.max;
-                    input.placeholder = Math.round((setpointLimits.min + setpointLimits.max) / 2);
-                }}
-            }}
-            
-            // Update the input field with current setpoint
-            if (data.setpoint) {{
-                const input = document.getElementById('setpointInput');
-                if (input) {{
-                    input.value = data.setpoint.toFixed(1);
-                }}
             }}
             
             // Determine mode and styling for temperature circle
@@ -1716,7 +1542,6 @@ if __name__ == '__main__':
     print(f"\nUnified Thermostat Control Features:")
     print(f"- Single cohesive control block like real thermostats")
     print(f"- +/- buttons for 1°F adjustments")
-    print(f"- Manual input field for precise control")
     print(f"- Visual lockout status indicator")
     print(f"- Dynamic safety limits from AV{SETPOINT_MAX_AV} (max) and AV{SETPOINT_MIN_AV} (min)")
     print(f"- Thermostat Lockout toggle for admin control")
