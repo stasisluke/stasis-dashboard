@@ -1298,19 +1298,21 @@ def set_setpoint():
         }
         print(f"Request body: {request_body}", flush=True)
         
-        # Build the setpoint URL based on lockout mode
-        lockout_mode = request_data.get('lockout', False)
+        # Based on your priority array analysis:
+        # Priority 8 = "manual-operator" (OCCUPIED - can't write here)
+        # Priority 10 = "68.0 °F PG_eZNS_Display" (thermostat)
+        # We need to find an available priority (one that shows "---")
         
         if lockout_mode:
-            # Priority 8 = Manual Operator (blocks thermostat completely)
-            priority = 8
+            # Lockout mode: Try Priority 7 or other available priorities
+            priority = 7  # Try available-7 instead of occupied manual-operator
             setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"LOCKOUT MODE: Using priority {priority} - thermostat blocked", flush=True)
+            print(f"LOCKOUT MODE: Using priority {priority} (available-7) - should block thermostat", flush=True)
         else:
-            # Priority 8 for the command, but we'll also clear Priority 10 to allow thermostat temporary control
-            priority = 8
+            # Normal mode: Try Priority 7 but clear Priority 10 to allow thermostat temporary control
+            priority = 7  # Try available-7 instead of occupied manual-operator
             setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"NORMAL MODE: Using priority {priority} - will clear thermostat priority to allow temporary overrides", flush=True)
+            print(f"NORMAL MODE: Using priority {priority} (available-7) - will clear thermostat priority to allow temporary overrides", flush=True)
         
         print(f"Setpoint URL: {setpoint_url}", flush=True)
         
