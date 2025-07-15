@@ -1469,10 +1469,10 @@ def set_setpoint():
                 'error': f'Setpoint must be between {min_limit}°F and {max_limit}°F'
             }), 400
         
-        # Prepare the request body
+        # Prepare the request body - try different formats
         request_body = {
             "$base": "Real",
-            "value": str(new_setpoint)
+            "value": new_setpoint  # Try sending as number instead of string
         }
         print(f"Request body: {request_body}", flush=True)
         app.logger.info(f"Body: {request_body}")
@@ -1511,39 +1511,43 @@ def set_setpoint():
         print(f"PUT response text: {response.text}", flush=True)
         app.logger.info(f"PUT response: {response.status_code} - {response.text}")
         
-        # If normal mode (lockout OFF), also clear Priority 10 to allow thermostat temporary control
-        if not lockout_mode and response.ok:
-            print("NORMAL MODE: Clearing thermostat priority 10 to allow temporary overrides...", flush=True)
-            app.logger.info("Clearing thermostat priority 10 for temporary control")
-            
-            # Clear Priority 10 (thermostat) by sending NULL
-            clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
-            clear_body = {"$base": "Null", "value": ""}
-            
-            clear_response = requests.put(
-                clear_url,
-                headers=auth_header,
-                json=clear_body,
-                timeout=15
-            )
-            
-            print(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
-            app.logger.info(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}")
-        
         if response.ok:
             try:
                 response_data = response.json()
                 print(f"PUT response JSON: {response_data}", flush=True)
                 app.logger.info(f"Response JSON: {response_data}")
                 
-                # Check BACnet response
+                # Check BACnet response - look for different error patterns
                 error_code = response_data.get('error', '0')
                 error_text = response_data.get('errorText', 'Unknown')
                 
                 print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
                 app.logger.info(f"BACnet error: {error_code} - {error_text}")
                 
-                if error_code == '-1' or error_text == 'OK':
+                # BACnet success conditions
+                if (error_code == '-1' or error_code == '0' or 
+                    error_text in ['OK', 'Success'] or 
+                    response_data.get('value') is not None):
+                    
+                    # If normal mode (lockout OFF), also clear Priority 10 to allow thermostat temporary control
+                    if not lockout_mode:
+                        print("NORMAL MODE: Clearing thermostat priority 10 to allow temporary overrides...", flush=True)
+                        app.logger.info("Clearing thermostat priority 10 for temporary control")
+                        
+                        # Clear Priority 10 (thermostat) by sending NULL
+                        clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
+                        clear_body = {"$base": "Null", "value": None}
+                        
+                        clear_response = requests.put(
+                            clear_url,
+                            headers=auth_header,
+                            json=clear_body,
+                            timeout=15
+                        )
+                        
+                        print(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
+                        app.logger.info(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}")
+                    
                     lockout_status = "LOCKED" if lockout_mode else "UNLOCKED"
                     mode_description = "Thermostat blocked" if lockout_mode else "Thermostat can temporarily override"
                     
@@ -1558,9 +1562,44 @@ def set_setpoint():
                     app.logger.info(f"SUCCESS: {result}")
                     return jsonify(result)
                 else:
+                    # Try alternative approach - without priority
+                    print(f"BACnet error with priority, trying without priority...", flush=True)
+                    
+                    # Try simple write without priority
+                    simple_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
+                    
+                    simple_response = requests.put(
+                        simple_url, 
+                        headers=auth_header, 
+                        json=request_body, 
+                        timeout=15
+                    )
+                    
+                    print(f"Simple PUT response: {simple_response.status_code} - {simple_response.text}", flush=True)
+                    
+                    if simple_response.ok:
+                        simple_data = simple_response.json()
+                        simple_error = simple_data.get('error', '0')
+                        simple_error_text = simple_data.get('errorText', 'Unknown')
+                        
+                        if (simple_error == '-1' or simple_error == '0' or 
+                            simple_error_text in ['OK', 'Success'] or 
+                            simple_data.get('value') is not None):
+                            
+                            result = {
+                                'success': True, 
+                                'setpoint': new_setpoint,
+                                'priority': 'default',
+                                'lockout': lockout_mode,
+                                'message': f'Setpoint: {new_setpoint}°F (using default priority)'
+                            }
+                            print(f"SUCCESS (simple): Returning {result}", flush=True)
+                            return jsonify(result)
+                    
+                    # If both approaches fail
                     result = {
                         'success': False, 
-                        'error': f'BACnet error: {error_text} (code: {error_code})'
+                        'error': f'BACnet error: {error_text} (code: {error_code}). Also tried simple write.'
                     }
                     print(f"BACNET ERROR: Returning {result}", flush=True)
                     app.logger.warning(f"BACnet error: {result}")
