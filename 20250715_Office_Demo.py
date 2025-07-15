@@ -1,4 +1,99 @@
-#!/usr/bin/env python3
+@app.route('/api/setpoint', methods=['POST'])
+def set_setpoint():
+    """API endpoint to write new setpoint to AV1"""
+    print(f"\n=== SETPOINT REQUEST START ===", flush=True)
+    
+    try:
+        # Get the new setpoint from request
+        request_data = request.get_json()
+        print(f"Request data received: {request_data}", flush=True)
+        
+        if not request_data or 'setpoint' not in request_data:
+            error_msg = "Missing setpoint value in request"
+            print(f"ERROR: {error_msg}", flush=True)
+            return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
+        
+        new_setpoint = float(request_data['setpoint'])
+        print(f"New setpoint: {new_setpoint}", flush=True)
+        
+        # Validate setpoint range - use dynamic limits from API if available
+        min_limit = 60  # Default minimum
+        max_limit = 85  # Default maximum
+        
+        # Try to get actual limits from the API first
+        try:
+            # Fetch actual limits
+            max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
+            max_response = requests.get(max_url, headers=auth_header, timeout=5)
+            if max_response.ok:
+                max_data = max_response.json()
+                max_limit = float(max_data.get('value', 85))
+            
+            min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
+            min_response = requests.get(min_url, headers=auth_header, timeout=5)
+            if min_response.ok:
+                min_data = min_response.json()
+                min_limit = float(min_data.get('value', 60))
+        except Exception as limit_error:
+            print(f"Warning: Could not fetch setpoint limits, using defaults. Error: {limit_error}", flush=True)
+        
+        if new_setpoint < min_limit or new_setpoint > max_limit:
+            error_msg = f"Setpoint {new_setpoint} out of range ({min_limit}-{max_limit}°F)"
+            print(f"ERROR: {error_msg}", flush=True)
+            return jsonify({
+                'success': False, 
+                'error': f'Setpoint must be between {min_limit}°F and {max_limit}°F'
+            }), 400
+        
+        # Prepare the request body - try different formats
+        request_body = {
+            "$base": "Real",
+            "value": new_setpoint  # Try sending as number instead of string
+        }
+        print(f"Request body: {request_body}", flush=True)
+        
+        # Build the setpoint URL based on lockout mode
+        lockout_mode = request_data.get('lockout', False)
+        
+        if lockout_mode:
+            # Priority 8 = Manual Operator (blocks thermostat completely)
+            priority = 8
+            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
+            print(f"LOCKOUT MODE: Using priority {priority} - thermostat blocked", flush=True)
+        else:
+            # Priority 8 for the command, but we'll also clear Priority 10 to allow thermostat temporary control
+            priority = 8
+            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
+            print(f"NORMAL MODE: Using priority {priority} - will clear thermostat priority to allow temporary overrides", flush=True)
+        
+        print(f"Setpoint URL: {setpoint_url}", flush=True)
+        
+        # Make the PUT request to set our command
+        print("Making PUT request to BACnet API...", flush=True)
+        
+        response = requests.put(
+            setpoint_url, 
+            headers=auth_header, 
+            json=request_body, 
+            timeout=15
+        )
+        
+        print(f"PUT response status: {response.status_code}", flush=True)
+        print(f"PUT response text: {response.text}", flush=True)
+        
+        if response.ok:
+            try:
+                response_data = response.json()
+                print(f"PUT response JSON: {response_data}", flush=True)
+                
+                # Check BACnet response - look for different error patterns
+                error_code = response_data.get('error', '0')
+                error_text = response_data.get('errorText', 'Unknown')
+                
+                print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
+                
+                # BACnet success conditions
+                if (error_code == '-#!/usr/bin/env python3
 """
 Ecobee-Inspired Thermostat Dashboard with Unified Setpoint Control
 Serves the HTML file and provides API endpoints for thermostat data and setpoint control
@@ -364,33 +459,7 @@ def index():
             color: #2c3e50;
             line-height: 1;
             margin-bottom: 12px;
-            cursor: pointer;
             transition: all 0.2s ease;
-        }}
-        .setpoint-value:hover {{
-            color: #3498db;
-        }}
-        
-        .manual-input-btn {{
-            padding: 8px 16px;
-            border: 1px solid #bdc3c7;
-            background: #f8f9fa;
-            color: #6c757d;
-            border-radius: 6px;
-            font-size: 0.8em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-top: 8px;
-        }}
-        .manual-input-btn:hover {{
-            background: #e9ecef;
-            border-color: #95a5a6;
-        }}
-        .manual-input-btn.active {{
-            background: #3498db;
-            color: white;
-            border-color: #3498db;
         }}
         
         .setpoint-input {{
@@ -752,11 +821,6 @@ def index():
                             <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F" id="tempDown">−</button>
                             <div class="setpoint-display">
                                 <div class="setpoint-value" id="setpointValue">--°F</div>
-                                <div class="setpoint-actions" style="display: none;">
-                                    <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)" placeholder="75">
-                                    <button class="setpoint-set-btn" onclick="setCustomSetpoint()">Set</button>
-                                </div>
-                                <button class="manual-input-btn" onclick="toggleManualInput()" id="manualInputBtn">Manual</button>
                             </div>
                             <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F" id="tempUp">+</button>
                         </div>
@@ -912,53 +976,10 @@ def index():
             updateSetpoint(newSetpoint);
         }}
         
-        function toggleManualInput() {{
-            const actions = document.getElementById('setpointInput').parentElement;
-            const btn = document.getElementById('manualInputBtn');
-            
-            if (actions.style.display === 'none' || !actions.style.display) {{
-                actions.style.display = 'flex';
-                btn.textContent = 'Cancel';
-                btn.classList.add('active');
-                document.getElementById('setpointInput').focus();
-            }} else {{
-                actions.style.display = 'none';
-                btn.textContent = 'Manual';
-                btn.classList.remove('active');
-            }}
-        }}
-        
-        function setCustomSetpoint() {{
-            const input = document.getElementById('setpointInput');
-            const newSetpoint = parseFloat(input.value);
-            
-            if (isNaN(newSetpoint)) {{
-                showStatusMessage('Please enter a valid temperature', 'error');
-                return;
-            }}
-            
-            if (newSetpoint < setpointLimits.min || newSetpoint > setpointLimits.max) {{
-                showStatusMessage(`Setpoint must be between ${{setpointLimits.min}}°F and ${{setpointLimits.max}}°F`, 'error');
-                return;
-            }}
-            
-            // Hide manual input after setting
-            toggleManualInput();
-            updateSetpoint(newSetpoint);
-        }}
-        
-        function handleSetpointKeypress(event) {{
-            if (event.key === 'Enter') {{
-                setCustomSetpoint();
-            }} else if (event.key === 'Escape') {{
-                toggleManualInput();
-            }}
-        }}
-        
         async function updateSetpoint(newSetpoint) {{
             try {{
                 // Disable controls during update
-                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn, .manual-input-btn').forEach(btn => {{
+                document.querySelectorAll('.setpoint-btn').forEach(btn => {{
                     btn.disabled = true;
                 }});
                 
@@ -1033,7 +1054,7 @@ def index():
             }} finally {{
                 // Re-enable controls
                 console.log('Re-enabling controls...');
-                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn, .manual-input-btn').forEach(btn => {{
+                document.querySelectorAll('.setpoint-btn').forEach(btn => {{
                     btn.disabled = false;
                 }});
             }}
@@ -1421,85 +1442,53 @@ def get_thermostat_data():
 def set_setpoint():
     """API endpoint to write new setpoint to AV1"""
     print(f"\n=== SETPOINT REQUEST START ===", flush=True)
-    app.logger.info("=== SETPOINT REQUEST START ===")
     
     try:
         # Get the new setpoint from request
         request_data = request.get_json()
         print(f"Request data received: {request_data}", flush=True)
-        app.logger.info(f"Request data: {request_data}")
         
         if not request_data or 'setpoint' not in request_data:
-            error_msg = "Missing setpoint value in request"
-            print(f"ERROR: {error_msg}", flush=True)
-            app.logger.error(error_msg)
             return jsonify({'success': False, 'error': 'Missing setpoint value'}), 400
         
         new_setpoint = float(request_data['setpoint'])
         print(f"New setpoint: {new_setpoint}", flush=True)
-        app.logger.info(f"New setpoint: {new_setpoint}")
         
-        # Validate setpoint range - use dynamic limits from API if available
-        min_limit = 60  # Default minimum
-        max_limit = 85  # Default maximum
-        
-        # Try to get actual limits from the API first
-        try:
-            # Fetch actual limits
-            max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
-            max_response = requests.get(max_url, headers=auth_header, timeout=5)
-            if max_response.ok:
-                max_data = max_response.json()
-                max_limit = float(max_data.get('value', 85))
-            
-            min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
-            min_response = requests.get(min_url, headers=auth_header, timeout=5)
-            if min_response.ok:
-                min_data = min_response.json()
-                min_limit = float(min_data.get('value', 60))
-        except Exception as limit_error:
-            print(f"Warning: Could not fetch setpoint limits, using defaults. Error: {limit_error}", flush=True)
-        
-        if new_setpoint < min_limit or new_setpoint > max_limit:
-            error_msg = f"Setpoint {new_setpoint} out of range ({min_limit}-{max_limit}°F)"
-            print(f"ERROR: {error_msg}", flush=True)
-            app.logger.error(error_msg)
+        # Basic validation
+        if new_setpoint < 50 or new_setpoint > 90:
             return jsonify({
                 'success': False, 
-                'error': f'Setpoint must be between {min_limit}°F and {max_limit}°F'
+                'error': f'Setpoint must be between 50°F and 90°F'
             }), 400
         
-        # Prepare the request body - try different formats
-        request_body = {
-            "$base": "Real",
-            "value": new_setpoint  # Try sending as number instead of string
-        }
-        print(f"Request body: {request_body}", flush=True)
-        app.logger.info(f"Body: {request_body}")
-        
-        # Build the setpoint URL based on lockout mode
         lockout_mode = request_data.get('lockout', False)
+        print(f"Lockout mode: {lockout_mode}", flush=True)
+        
+        # Based on your priority array, we'll target Priority 8 (manual-operator)
+        # Priority 10 currently has "68.0 °F PG_eZNS_Display" (thermostat)
         
         if lockout_mode:
-            # Priority 8 = Manual Operator (blocks thermostat completely)
+            # Lockout mode: Write to Priority 8 and don't clear Priority 10
             priority = 8
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"LOCKOUT MODE: Using priority {priority} - thermostat blocked", flush=True)
-            app.logger.info(f"Lockout mode: priority {priority} - thermostat blocked")
+            print("LOCKOUT MODE: Will block thermostat by keeping Priority 8 active", flush=True)
         else:
-            # Priority 8 for the command, but we'll also clear Priority 10 to allow thermostat temporary control
+            # Normal mode: Write to Priority 8 but clear Priority 10 to allow thermostat temporary control
             priority = 8
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"NORMAL MODE: Using priority {priority} - will clear thermostat priority to allow temporary overrides", flush=True)
-            app.logger.info(f"Normal mode: priority {priority} - allowing thermostat temporary control")
+            print("NORMAL MODE: Will allow thermostat temporary control by clearing Priority 10", flush=True)
         
+        # Prepare request body
+        request_body = {
+            "$base": "Real",
+            "value": new_setpoint
+        }
+        print(f"Request body: {request_body}", flush=True)
+        
+        # Build setpoint URL
+        setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
         print(f"Setpoint URL: {setpoint_url}", flush=True)
-        app.logger.info(f"URL: {setpoint_url}")
         
-        # Make the PUT request to set our command
-        print("Making PUT request to BACnet API...", flush=True)
-        app.logger.info("Making PUT request to BACnet API...")
-        
+        # Make the PUT request
+        print(f"Making PUT request to Priority {priority}...", flush=True)
         response = requests.put(
             setpoint_url, 
             headers=auth_header, 
@@ -1509,32 +1498,30 @@ def set_setpoint():
         
         print(f"PUT response status: {response.status_code}", flush=True)
         print(f"PUT response text: {response.text}", flush=True)
-        app.logger.info(f"PUT response: {response.status_code} - {response.text}")
         
         if response.ok:
             try:
                 response_data = response.json()
                 print(f"PUT response JSON: {response_data}", flush=True)
-                app.logger.info(f"Response JSON: {response_data}")
                 
-                # Check BACnet response - look for different error patterns
+                # Check BACnet response
                 error_code = response_data.get('error', '0')
                 error_text = response_data.get('errorText', 'Unknown')
                 
                 print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
-                app.logger.info(f"BACnet error: {error_code} - {error_text}")
                 
-                # BACnet success conditions
-                if (error_code == '-1' or error_code == '0' or 
+                # BACnet success conditions (be more permissive since "Unspecified Error" might still work)
+                if (error_code in ['-1', '0'] or 
                     error_text in ['OK', 'Success'] or 
+                    'error' not in error_text.lower() or
                     response_data.get('value') is not None):
                     
-                    # If normal mode (lockout OFF), also clear Priority 10 to allow thermostat temporary control
+                    print("Priority 8 write appears successful", flush=True)
+                    
+                    # If normal mode, clear Priority 10 to allow thermostat temporary control
                     if not lockout_mode:
-                        print("NORMAL MODE: Clearing thermostat priority 10 to allow temporary overrides...", flush=True)
-                        app.logger.info("Clearing thermostat priority 10 for temporary control")
+                        print("NORMAL MODE: Clearing Priority 10 to allow thermostat temporary control...", flush=True)
                         
-                        # Clear Priority 10 (thermostat) by sending NULL
                         clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
                         clear_body = {"$base": "Null", "value": None}
                         
@@ -1545,8 +1532,7 @@ def set_setpoint():
                             timeout=15
                         )
                         
-                        print(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
-                        app.logger.info(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}")
+                        print(f"Clear Priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
                     
                     lockout_status = "LOCKED" if lockout_mode else "UNLOCKED"
                     mode_description = "Thermostat blocked" if lockout_mode else "Thermostat can temporarily override"
@@ -1556,87 +1542,43 @@ def set_setpoint():
                         'setpoint': new_setpoint,
                         'priority': priority,
                         'lockout': lockout_mode,
-                        'message': f'Admin setpoint: {new_setpoint}°F ({lockout_status} - {mode_description})'
+                        'message': f'Temperature set to {new_setpoint}°F at Priority {priority} ({lockout_status})'
                     }
-                    print(f"SUCCESS: Returning {result}", flush=True)
-                    app.logger.info(f"SUCCESS: {result}")
+                    print(f"SUCCESS: {result}", flush=True)
                     return jsonify(result)
                 else:
-                    # Try alternative approach - without priority
-                    print(f"BACnet error with priority, trying without priority...", flush=True)
-                    
-                    # Try simple write without priority
-                    simple_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
-                    
-                    simple_response = requests.put(
-                        simple_url, 
-                        headers=auth_header, 
-                        json=request_body, 
-                        timeout=15
-                    )
-                    
-                    print(f"Simple PUT response: {simple_response.status_code} - {simple_response.text}", flush=True)
-                    
-                    if simple_response.ok:
-                        simple_data = simple_response.json()
-                        simple_error = simple_data.get('error', '0')
-                        simple_error_text = simple_data.get('errorText', 'Unknown')
-                        
-                        if (simple_error == '-1' or simple_error == '0' or 
-                            simple_error_text in ['OK', 'Success'] or 
-                            simple_data.get('value') is not None):
-                            
-                            result = {
-                                'success': True, 
-                                'setpoint': new_setpoint,
-                                'priority': 'default',
-                                'lockout': lockout_mode,
-                                'message': f'Setpoint: {new_setpoint}°F (using default priority)'
-                            }
-                            print(f"SUCCESS (simple): Returning {result}", flush=True)
-                            return jsonify(result)
-                    
-                    # If both approaches fail
-                    result = {
+                    # If Priority 8 fails, the controller might not allow manual operator writes
+                    error_msg = f'BACnet controller rejected Priority 8 write: {error_text} (code: {error_code}). Your controller may not allow manual operator commands.'
+                    print(f"ERROR: {error_msg}", flush=True)
+                    return jsonify({
                         'success': False, 
-                        'error': f'BACnet error: {error_text} (code: {error_code}). Also tried simple write.'
-                    }
-                    print(f"BACNET ERROR: Returning {result}", flush=True)
-                    app.logger.warning(f"BACnet error: {result}")
-                    return jsonify(result), 400
+                        'error': error_msg
+                    }), 400
                     
             except Exception as json_error:
-                result = {
+                print(f"JSON parse error: {json_error}", flush=True)
+                return jsonify({
                     'success': False, 
-                    'error': f'Could not parse response: {str(json_error)}'
-                }
-                print(f"JSON PARSE ERROR: {json_error}", flush=True)
-                app.logger.error(f"JSON parse error: {json_error}")
-                return jsonify(result), 500
+                    'error': f'Could not parse BACnet response: {str(json_error)}'
+                }), 500
         else:
-            result = {
+            print(f"HTTP error: {response.status_code} - {response.text}", flush=True)
+            return jsonify({
                 'success': False, 
                 'error': f'HTTP {response.status_code}: {response.text}'
-            }
-            print(f"HTTP ERROR: Returning {result}", flush=True)
-            app.logger.error(f"HTTP error: {result}")
-            return jsonify(result), response.status_code
+            }), response.status_code
             
     except Exception as e:
-        result = {
+        print(f"EXCEPTION: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({
             'success': False, 
             'error': f'Server error: {str(e)}'
-        }
-        print(f"EXCEPTION: {e}", flush=True)
-        app.logger.error(f"Exception: {e}")
-        import traceback
-        print(f"Full traceback:", flush=True)
-        traceback.print_exc()
-        return jsonify(result), 500
+        }), 500
     
     finally:
         print("=== SETPOINT REQUEST END ===\n", flush=True)
-        app.logger.info("=== SETPOINT REQUEST END ===")
 
 @app.route('/api/trends')
 def get_trend_data():
