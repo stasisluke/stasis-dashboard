@@ -21,25 +21,25 @@ sys.stdout.reconfigure(line_buffering=True)
 # ========================================
 
 # Server Configuration
-SERVER = "stasisenergy.entelicloud.com"  # Updated to match working version
-SITE = "StuccoCo"  # Updated to match working version
-DEVICE = "4145595"  # Updated to match working version
+SERVER = "stasisenergygroup.entelicloud.com" # no https, no slashes. Simply site with *.com
+SITE = "SEG Office"
+DEVICE = "10200"
 USER = "stasis_api"
 PASSWORD = os.environ.get('PASSWORD', 'your_password_here')  # Update with your actual password
 
 # Display Configuration - customize how titles appear on the dashboard
-DISPLAY_SITE_NAME = "Sacramento Stucco"  # Updated to match working version
+DISPLAY_SITE_NAME = "SEG Front RTU"  # Custom site name for display
 DISPLAY_DEVICE_NAME = "Zone Controller"  # Custom device name for display (leave empty to use actual device name)
 
 # BACnet Object Configuration - adjust these for different controllers
-TEMPERATURE_AI = 301001          # Updated to match working version
+TEMPERATURE_AI = 201001          # Analog Input for zone temperature
 SETPOINT_AV = 1                  # Analog Value for active zone setpoint (THIS IS WHAT WE CONTROL)
-SETPOINT_MAX_AV = 10             # Updated to match working version
-SETPOINT_MIN_AV = 11             # Updated to match working version
+SETPOINT_MAX_AV = 99             # Analog Value for maximum setpoint limit
+SETPOINT_MIN_AV = 98             # Analog Value for minimum setpoint limit
 SYSTEM_MODE_MV = 2               # Multi-state Value for system mode (heating/cooling/deadband)
 PEAK_SAVINGS_BV = 2025           # Binary Value for peak savings mode status
 FAN_STATUS_BO = 1                # Binary Output for fan status
-TEMP_TREND_LOG_INSTANCE = 27     # Updated to match working version
+TEMP_TREND_LOG_INSTANCE = 200     # Trend Log instance for temperature history
 
 # ========================================
 # END CONFIGURATION SECTION
