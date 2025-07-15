@@ -1291,111 +1291,137 @@ def set_setpoint():
                 'error': f'Setpoint must be between 60°F and 85°F'
             }), 400
         
-        # Prepare the request body - using string value like the working version
-        request_body = {
+        # Prepare the request body - try both string and numeric formats
+        request_body_string = {
             "$base": "Real",
             "value": str(new_setpoint)
         }
-        print(f"Request body: {request_body}", flush=True)
+        request_body_numeric = {
+            "$base": "Real", 
+            "value": new_setpoint
+        }
+        
+        print(f"Request body (string): {request_body_string}", flush=True)
+        print(f"Request body (numeric): {request_body_numeric}", flush=True)
         
         # Build the setpoint URL based on lockout mode
         lockout_mode = request_data.get('lockout', False)
         
-        # Based on your priority array analysis:
-        # Priority 8 = "manual-operator" (OCCUPIED - can't write here)
-        # Priority 10 = "68.0 °F PG_eZNS_Display" (thermostat)
-        # We need to find an available priority (one that shows "---")
+        # Your priority array shows these as available:
+        # 3available-3---
+        # 4available-4---  
+        # 7available-7---
+        # 9available-9---
+        # Let's try multiple available priorities AND different value formats
         
-        if lockout_mode:
-            # Lockout mode: Try Priority 7 or other available priorities
-            priority = 7  # Try available-7 instead of occupied manual-operator
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"LOCKOUT MODE: Using priority {priority} (available-7) - should block thermostat", flush=True)
-        else:
-            # Normal mode: Try Priority 7 but clear Priority 10 to allow thermostat temporary control
-            priority = 7  # Try available-7 instead of occupied manual-operator
-            setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
-            print(f"NORMAL MODE: Using priority {priority} (available-7) - will clear thermostat priority to allow temporary overrides", flush=True)
+        available_priorities = [9, 7, 4, 3]  # Try in order of preference
+        request_bodies = [request_body_string, request_body_numeric]  # Try both formats
+        success_result = None
         
-        print(f"Setpoint URL: {setpoint_url}", flush=True)
-        
-        # Make the PUT request to set our command
-        print("Making PUT request to BACnet API...", flush=True)
-        
-        response = requests.put(
-            setpoint_url, 
-            headers=auth_header, 
-            json=request_body, 
-            timeout=15
-        )
-        
-        print(f"PUT response status: {response.status_code}", flush=True)
-        print(f"PUT response text: {response.text}", flush=True)
-        
-        # If normal mode (lockout OFF), also clear Priority 10 to allow thermostat temporary control
-        if not lockout_mode and response.ok:
-            print("NORMAL MODE: Clearing thermostat priority 10 to allow temporary overrides...", flush=True)
-            
-            # Clear Priority 10 (thermostat) by sending NULL
-            clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
-            clear_body = {"$base": "Null", "value": ""}
-            
-            clear_response = requests.put(
-                clear_url,
-                headers=auth_header,
-                json=clear_body,
-                timeout=15
-            )
-            
-            print(f"Clear priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
-        
-        if response.ok:
-            try:
-                response_data = response.json()
-                print(f"PUT response JSON: {response_data}", flush=True)
+        for priority in available_priorities:
+            for i, request_body in enumerate(request_bodies):
+                body_type = "string" if i == 0 else "numeric"
+                print(f"\n--- Trying Priority {priority} with {body_type} value ---", flush=True)
                 
-                # Check BACnet response - be more permissive like the working version
-                error_code = response_data.get('error', '0')
-                error_text = response_data.get('errorText', 'Unknown')
+                setpoint_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority={priority}&alt=json"
+                print(f"URL: {setpoint_url}", flush=True)
+                print(f"Body: {request_body}", flush=True)
                 
-                print(f"BACnet error code: {error_code}, text: {error_text}", flush=True)
-                
-                # More permissive success check - treat "Unspecified Error" as success
-                if error_code == '-1' or error_text in ['OK', 'Unspecified Error']:
-                    lockout_status = "LOCKED" if lockout_mode else "UNLOCKED"
-                    mode_description = "Thermostat blocked" if lockout_mode else "Thermostat can temporarily override"
+                try:
+                    response = requests.put(
+                        setpoint_url, 
+                        headers=auth_header, 
+                        json=request_body, 
+                        timeout=15
+                    )
                     
-                    result = {
-                        'success': True, 
-                        'setpoint': new_setpoint,
-                        'priority': priority,
-                        'lockout': lockout_mode,
-                        'message': f'Admin setpoint: {new_setpoint}°F ({lockout_status} - {mode_description})'
-                    }
-                    print(f"SUCCESS: Returning {result}", flush=True)
-                    return jsonify(result)
-                else:
-                    result = {
-                        'success': False, 
-                        'error': f'BACnet error: {error_text} (code: {error_code})'
-                    }
-                    print(f"BACNET ERROR: Returning {result}", flush=True)
-                    return jsonify(result), 400
+                    print(f"Priority {priority} ({body_type}) response status: {response.status_code}", flush=True)
+                    print(f"Priority {priority} ({body_type}) response text: {response.text}", flush=True)
                     
-            except Exception as json_error:
-                result = {
-                    'success': False, 
-                    'error': f'Could not parse response: {str(json_error)}'
-                }
-                print(f"JSON PARSE ERROR: {json_error}", flush=True)
-                return jsonify(result), 500
+                    if response.ok:
+                        response_data = response.json()
+                        error_code = response_data.get('error', '0')
+                        error_text = response_data.get('errorText', 'Unknown')
+                        
+                        print(f"Priority {priority} ({body_type}) BACnet error: {error_code} - {error_text}", flush=True)
+                        
+                        # Check for success (including "Unspecified Error" which might still work)
+                        if error_code == '-1' or error_text in ['OK', 'Success', 'Unspecified Error']:
+                            print(f"SUCCESS with Priority {priority} using {body_type} format!", flush=True)
+                            
+                            # If normal mode, try to clear Priority 10 to allow thermostat temporary control
+                            if not lockout_mode:
+                                print(f"NORMAL MODE: Clearing Priority 10 to allow thermostat temporary control...", flush=True)
+                                
+                                clear_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?priority=10&alt=json"
+                                clear_body = {"$base": "Null", "value": ""}
+                                
+                                clear_response = requests.put(clear_url, headers=auth_header, json=clear_body, timeout=15)
+                                print(f"Clear Priority 10 response: {clear_response.status_code} - {clear_response.text}", flush=True)
+                            
+                            lockout_status = "LOCKED" if lockout_mode else "UNLOCKED"
+                            
+                            success_result = {
+                                'success': True, 
+                                'setpoint': new_setpoint,
+                                'priority': priority,
+                                'format': body_type,
+                                'lockout': lockout_mode,
+                                'message': f'Temperature set to {new_setpoint}°F at Priority {priority} using {body_type} format ({lockout_status})'
+                            }
+                            break  # Exit the inner loop on success
+                        else:
+                            print(f"Priority {priority} ({body_type}) failed: {error_text} (code: {error_code})", flush=True)
+                    else:
+                        print(f"Priority {priority} ({body_type}) HTTP error: {response.status_code}", flush=True)
+                        
+                except Exception as priority_error:
+                    print(f"Priority {priority} ({body_type}) exception: {priority_error}", flush=True)
+                    continue
+            
+            if success_result:
+                break  # Exit the outer loop if we found success
+        
+        if success_result:
+            print(f"FINAL SUCCESS: {success_result}", flush=True)
+            return jsonify(success_result)
         else:
-            result = {
+            # All priorities failed - try one more approach: no priority at all
+            print(f"\nAll priorities failed, trying default write (no priority)...", flush=True)
+            
+            for i, request_body in enumerate(request_bodies):
+                body_type = "string" if i == 0 else "numeric"
+                print(f"Trying default write with {body_type} format...", flush=True)
+                
+                default_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_AV}/present-value?alt=json"
+                default_response = requests.put(default_url, headers=auth_header, json=request_body, timeout=15)
+                
+                print(f"Default write ({body_type}) response: {default_response.status_code} - {default_response.text}", flush=True)
+                
+                if default_response.ok:
+                    default_data = default_response.json()
+                    default_error = default_data.get('error', '0')
+                    default_error_text = default_data.get('errorText', 'Unknown')
+                    
+                    if default_error == '-1' or default_error_text in ['OK', 'Success', 'Unspecified Error']:
+                        success_result = {
+                            'success': True, 
+                            'setpoint': new_setpoint,
+                            'priority': 'default',
+                            'format': body_type,
+                            'lockout': lockout_mode,
+                            'message': f'Temperature set to {new_setpoint}°F (default priority, {body_type} format)'
+                        }
+                        print(f"SUCCESS with default write using {body_type} format: {success_result}", flush=True)
+                        break
+            
+            # Everything failed
+            error_msg = f'All available priorities (9,7,4,3) and default write failed. Your BACnet controller may not allow writes to AV{SETPOINT_AV}.'
+            print(f"COMPLETE FAILURE: {error_msg}", flush=True)
+            return jsonify({
                 'success': False, 
-                'error': f'HTTP {response.status_code}: {response.text}'
-            }
-            print(f"HTTP ERROR: Returning {result}", flush=True)
-            return jsonify(result), response.status_code
+                'error': error_msg
+            }), 400
             
     except Exception as e:
         result = {
