@@ -359,10 +359,38 @@ def index():
         }}
         
         .setpoint-value {{
-            font-size: 2.2em;
-            font-weight: 500;
+            font-size: 3.2em;
+            font-weight: 300;
             color: #2c3e50;
             line-height: 1;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }}
+        .setpoint-value:hover {{
+            color: #3498db;
+        }}
+        
+        .manual-input-btn {{
+            padding: 8px 16px;
+            border: 1px solid #bdc3c7;
+            background: #f8f9fa;
+            color: #6c757d;
+            border-radius: 6px;
+            font-size: 0.8em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+        }}
+        .manual-input-btn:hover {{
+            background: #e9ecef;
+            border-color: #95a5a6;
+        }}
+        .manual-input-btn.active {{
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
         }}
         
         .setpoint-input {{
@@ -714,9 +742,6 @@ def index():
                 
                 <!-- Unified Thermostat Control -->
                 <div class="thermostat-control" id="thermostatControl" style="display: none;">
-                    <div class="current-temp-label">Current Temperature</div>
-                    <div class="current-temp-value" id="currentTempMini">--°F</div>
-                    
                     <div class="setpoint-section">
                         <div class="setpoint-header">
                             <div class="setpoint-label">Set Temperature</div>
@@ -727,10 +752,11 @@ def index():
                             <button class="setpoint-btn" onclick="adjustSetpoint(-1)" title="Decrease by 1°F" id="tempDown">−</button>
                             <div class="setpoint-display">
                                 <div class="setpoint-value" id="setpointValue">--°F</div>
-                                <div class="setpoint-actions">
+                                <div class="setpoint-actions" style="display: none;">
                                     <input type="number" class="setpoint-input" id="setpointInput" step="0.5" onkeypress="handleSetpointKeypress(event)" placeholder="75">
                                     <button class="setpoint-set-btn" onclick="setCustomSetpoint()">Set</button>
                                 </div>
+                                <button class="manual-input-btn" onclick="toggleManualInput()" id="manualInputBtn">Manual</button>
                             </div>
                             <button class="setpoint-btn" onclick="adjustSetpoint(1)" title="Increase by 1°F" id="tempUp">+</button>
                         </div>
@@ -877,13 +903,29 @@ def index():
                 return;
             }}
             
-            const newSetpoint = currentSetpoint + change;
+            const newSetpoint = Math.round((currentSetpoint + change) * 2) / 2; // Round to nearest 0.5
             if (newSetpoint < setpointLimits.min || newSetpoint > setpointLimits.max) {{
                 showStatusMessage(`Setpoint must be between ${{setpointLimits.min}}°F and ${{setpointLimits.max}}°F`, 'error');
                 return;
             }}
             
             updateSetpoint(newSetpoint);
+        }}
+        
+        function toggleManualInput() {{
+            const actions = document.getElementById('setpointInput').parentElement;
+            const btn = document.getElementById('manualInputBtn');
+            
+            if (actions.style.display === 'none' || !actions.style.display) {{
+                actions.style.display = 'flex';
+                btn.textContent = 'Cancel';
+                btn.classList.add('active');
+                document.getElementById('setpointInput').focus();
+            }} else {{
+                actions.style.display = 'none';
+                btn.textContent = 'Manual';
+                btn.classList.remove('active');
+            }}
         }}
         
         function setCustomSetpoint() {{
@@ -900,25 +942,28 @@ def index():
                 return;
             }}
             
+            // Hide manual input after setting
+            toggleManualInput();
             updateSetpoint(newSetpoint);
         }}
         
         function handleSetpointKeypress(event) {{
             if (event.key === 'Enter') {{
                 setCustomSetpoint();
+            }} else if (event.key === 'Escape') {{
+                toggleManualInput();
             }}
         }}
         
         async function updateSetpoint(newSetpoint) {{
             try {{
                 // Disable controls during update
-                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn').forEach(btn => {{
+                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn, .manual-input-btn').forEach(btn => {{
                     btn.disabled = true;
                 }});
                 
                 // IMMEDIATELY update the display optimistically
                 document.getElementById('setpointValue').textContent = newSetpoint.toFixed(1) + '°F';
-                document.getElementById('setpointInput').value = newSetpoint.toFixed(1);
                 currentSetpoint = newSetpoint;
                 
                 showStatusMessage(`Setting temperature to ${{newSetpoint}}°F...`, 'success');
@@ -939,9 +984,24 @@ def index():
                 console.log('Response status:', response.status);
                 
                 if (!response.ok) {{
+                    // Get error details for better debugging
+                    let errorText = `HTTP ${{response.status}}: ${{response.statusText}}`;
+                    try {{
+                        const errorData = await response.json();
+                        if (errorData.error) {{
+                            errorText = errorData.error;
+                        }}
+                    }} catch (e) {{
+                        // If JSON parsing fails, use response text
+                        const textError = await response.text();
+                        if (textError) {{
+                            errorText = textError;
+                        }}
+                    }}
+                    
                     // If failed, revert the optimistic update
                     fetchData();
-                    throw new Error(`HTTP ${{response.status}}: ${{response.statusText}}`);
+                    throw new Error(errorText);
                 }}
                 
                 const result = await response.json();
@@ -973,7 +1033,7 @@ def index():
             }} finally {{
                 // Re-enable controls
                 console.log('Re-enabling controls...');
-                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn').forEach(btn => {{
+                document.querySelectorAll('.setpoint-btn, .setpoint-set-btn, .manual-input-btn').forEach(btn => {{
                     btn.disabled = false;
                 }});
             }}
@@ -1064,14 +1124,10 @@ def index():
             const setpointValue = data.setpoint ? data.setpoint.toFixed(1) : '--';
             
             const currentTempEl = document.getElementById('currentTemp');
-            const currentTempMiniEl = document.getElementById('currentTempMini');
             const setpointValueEl = document.getElementById('setpointValue');
             
             if (currentTempEl) {{
                 currentTempEl.textContent = tempValue;
-            }}
-            if (currentTempMiniEl) {{
-                currentTempMiniEl.textContent = tempValue + '°F';
             }}
             if (setpointValueEl) {{
                 setpointValueEl.textContent = setpointValue + '°F';
@@ -1383,14 +1439,34 @@ def set_setpoint():
         print(f"New setpoint: {new_setpoint}", flush=True)
         app.logger.info(f"New setpoint: {new_setpoint}")
         
-        # Validate setpoint range
-        if new_setpoint < 60 or new_setpoint > 85:
-            error_msg = f"Setpoint {new_setpoint} out of range"
+        # Validate setpoint range - use dynamic limits from API if available
+        min_limit = 60  # Default minimum
+        max_limit = 85  # Default maximum
+        
+        # Try to get actual limits from the API first
+        try:
+            # Fetch actual limits
+            max_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MAX_AV}/present-value?alt=json"
+            max_response = requests.get(max_url, headers=auth_header, timeout=5)
+            if max_response.ok:
+                max_data = max_response.json()
+                max_limit = float(max_data.get('value', 85))
+            
+            min_url = f"https://{SERVER}/enteliweb/api/.bacnet/{SITE}/{DEVICE}/analog-value,{SETPOINT_MIN_AV}/present-value?alt=json"
+            min_response = requests.get(min_url, headers=auth_header, timeout=5)
+            if min_response.ok:
+                min_data = min_response.json()
+                min_limit = float(min_data.get('value', 60))
+        except Exception as limit_error:
+            print(f"Warning: Could not fetch setpoint limits, using defaults. Error: {limit_error}", flush=True)
+        
+        if new_setpoint < min_limit or new_setpoint > max_limit:
+            error_msg = f"Setpoint {new_setpoint} out of range ({min_limit}-{max_limit}°F)"
             print(f"ERROR: {error_msg}", flush=True)
             app.logger.error(error_msg)
             return jsonify({
                 'success': False, 
-                'error': f'Setpoint must be between 60°F and 85°F'
+                'error': f'Setpoint must be between {min_limit}°F and {max_limit}°F'
             }), 400
         
         # Prepare the request body
